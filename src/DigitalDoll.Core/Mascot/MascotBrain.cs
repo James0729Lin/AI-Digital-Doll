@@ -290,6 +290,19 @@ public sealed class MascotBrain
         EnterWalk(LieSpot(platform, X));
     }
 
+    /// <summary>
+    /// For previews and snapshots: switches to a state shown on the spot (Sit, Lie,
+    /// Sprawl, GetUp, Tumble) while standing on a platform.
+    /// </summary>
+    public void Preview(MascotState state)
+    {
+        if (PlatformId is null || state is not (MascotState.Sit or MascotState.Lie or MascotState.Sprawl or MascotState.GetUp or MascotState.Tumble))
+            return;
+        _plan = Plan.None;
+        _waitDuration = float.MaxValue;
+        SetState(state);
+    }
+
     /// <summary>Wakes a lying mascot (it gets up); does nothing otherwise.</summary>
     public void Wake()
     {

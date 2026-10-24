@@ -4,6 +4,7 @@ using System.Linq;
 using DigitalDoll.Body;
 using DigitalDoll.Character;
 using DigitalDoll.Core;
+using DigitalDoll.Core.Acting;
 using DigitalDoll.Core.Body;
 using DigitalDoll.Core.Mascot;
 using DigitalDoll.Creator;
@@ -26,6 +27,11 @@ public partial class MascotRoot : Node3D
     private const float HitMargin = 5f;
     private const float HitSlack = 6f;
     private const float LeadSeconds = 0.1f;
+
+    /// <summary>Cursor travel (px) or hold time (s) that turns a press into picking the character up.</summary>
+    private const float DragThreshold = 6f;
+    private const float HoldToDrag = 0.35f;
+    private const float DoubleClickWait = 0.28f;
 
     private const int MenuCallOver = 0;
     private const int MenuLoad = 1;
@@ -57,6 +63,16 @@ public partial class MascotRoot : Node3D
     private Vector2[] _region = Array.Empty<Vector2>();
 
     private bool _dragging;
+    private bool _pressed;
+    private Vector2 _pressCursor;
+    private float _pressTime;
+    private float _pokeDelay = -1f;
+    private Vector2 _pokeCursor;
+    private Vector2 _lastHover = new(float.NaN, float.NaN);
+    private float _nearTravel;
+    private Vector2[] _tight = Array.Empty<Vector2>();
+    private TouchTracker _touch = null!;
+    private PerformanceDirector _director = null!;
     private Vector2 _grabOffset;
     private Vector2 _lastCursor;
     private Vector2 _dragVelocity;
@@ -105,7 +121,11 @@ public partial class MascotRoot : Node3D
         if (!LoadStartCharacter())
             LoadCharacter(DefaultCharacter, persist: false);
 
+        _touch = new TouchTracker(_random);
+        _director = new PerformanceDirector(_random);
         _snapshot?.Begin(_brain!, _windowSize);
+        if (_snapshot != null)
+            _snapshot.Act(_animator!);
         SelfTest.OnSceneReady(this, "desktop");
     }
 
@@ -133,8 +153,22 @@ public partial class MascotRoot : Node3D
             }
         }
 
+        if (_pressed && !_dragging)
+        {
+            _pressTime += dt;
+            if (CursorInWindow().DistanceTo(_pressCursor) > DragThreshold || _pressTime > HoldToDrag)
+                StartDrag();
+        }
         if (_dragging)
             UpdateDrag(dt);
+        if (_pokeDelay >= 0f)
+        {
+            _pokeDelay -= dt;
+            if (_pokeDelay < 0f)
+                Poke(_pokeCursor);
+        }
+        if (_snapshot == null)
+            UpdateTouch(dt);
 
         _brain.Update(dt);
         PlaceCharacter(dt);
@@ -144,7 +178,7 @@ public partial class MascotRoot : Node3D
         if (_brain.State == MascotState.Idle && _snapshot == null)
             AimHeadAtCursor();
         _animator.Update(dt, _brain.State, _brain.VelocityX / _pixelsPerMetre, _dragVelocity.X / _pixelsPerMetre,
-            _brain.State == MascotState.Climb ? _brain.VelocityY / _pixelsPerMetre : 0f);
+            _brain.State == MascotState.Climb ? _brain.VelocityY / _pixelsPerMetre : 0f, _brain.Running);
 
         if (_snapshot == null)
         {
@@ -165,24 +199,166 @@ public partial class MascotRoot : Node3D
 
         if (@event is InputEventMouseButton button)
         {
-            if (button.ButtonIndex == MouseButton.Left && button.Pressed)
+            if (button.ButtonIndex == MouseButton.Left && button.Pressed && button.DoubleClick)
             {
-                _dragging = true;
-                _lastCursor = CursorInWindow();
-                _grabOffset = _lastCursor - new Vector2(_brain.X, _brain.Y);
-                _dragVelocity = Vector2.Zero;
-                _brain.BeginDrag();
-                SetMousePassthrough(Array.Empty<Vector2>());
+                // A double click talks to the character instead of poking it twice.
+                _pokeDelay = -1f;
+                _pressed = false;
+                DoubleClicked?.Invoke();
             }
-            else if (button.ButtonIndex == MouseButton.Left && !button.Pressed && _dragging)
+            else if (button.ButtonIndex == MouseButton.Left && button.Pressed)
             {
-                _dragging = false;
-                _brain.EndDrag(_dragVelocity.X, Mathf.Min(_dragVelocity.Y, 0f));
+                // Picked up only once the cursor moves or the button is held; a quick
+                // click is a poke.
+                _pressed = true;
+                _pressTime = 0f;
+                _pressCursor = CursorInWindow();
+            }
+            else if (button.ButtonIndex == MouseButton.Left && !button.Pressed)
+            {
+                if (_dragging)
+                {
+                    _dragging = false;
+                    _brain.EndDrag(_dragVelocity.X, Mathf.Min(_dragVelocity.Y, 0f));
+                }
+                else if (_pressed)
+                {
+                    _pokeDelay = DoubleClickWait;
+                    _pokeCursor = _pressCursor;
+                }
+                _pressed = false;
             }
             else if (button.ButtonIndex == MouseButton.Right && button.Pressed)
             {
                 ShowMenu(DisplayServer.MouseGetPosition());
             }
+        }
+    }
+
+    /// <summary>Raised when the character is double-clicked (opens the chat).</summary>
+    public event Action? DoubleClicked;
+
+    internal MascotBrain? Brain => _brain;
+    internal ProceduralAnimator? Animator => _animator;
+
+    /// <summary>Screen position just above the character's head (for the speech bubble).</summary>
+    internal Vector2I HeadScreenPosition()
+    {
+        if (_rig == null)
+            return GetWindow().Position;
+        var head = _camera.UnprojectPosition(_rig.BoneGlobalPosition("Head"));
+        float top = _tight.Length > 0 ? _tight.Min(p => p.Y) : head.Y - _heightPixels * 0.12f;
+        return GetWindow().Position + new Vector2I((int)head.X, (int)Mathf.Min(top, head.Y));
+    }
+
+    /// <summary>Performs an action asked for in the chat ("sit", "lie" or a performance action).</summary>
+    internal void PerformCommand(string action)
+    {
+        if (_brain == null || _animator == null)
+            return;
+        switch (action)
+        {
+            case "sit":
+                _brain.SitDown();
+                break;
+            case "lie":
+                _brain.LieDown();
+                break;
+            default:
+                if (_director.Pick(action, 0.8f) is GestureCue cue)
+                    _animator.Play(cue, now: true);
+                break;
+        }
+    }
+
+    private void StartDrag()
+    {
+        _dragging = true;
+        _lastCursor = CursorInWindow();
+        _grabOffset = _pressCursor - new Vector2(_brain!.X, _brain.Y);
+        _dragVelocity = Vector2.Zero;
+        _brain.BeginDrag();
+        _animator?.StopGestures();
+        SetMousePassthrough(Array.Empty<Vector2>());
+    }
+
+    private TouchZone ZoneAt(Vector2 cursor)
+    {
+        if (_rig == null)
+            return TouchZone.Body;
+        float neck = _camera.UnprojectPosition(_rig.BoneGlobalPosition("Neck")).Y;
+        return cursor.Y < neck ? TouchZone.Head : TouchZone.Body;
+    }
+
+    private void Poke(Vector2 cursor)
+    {
+        var brain = _brain!;
+        if (brain.State == MascotState.Lie)
+        {
+            // Woken with a start.
+            brain.Wake();
+            _animator!.Feel(Emotion.Surprised, 0.9f, 2f);
+            return;
+        }
+        if (brain.State is MascotState.Sprawl or MascotState.Tumble)
+        {
+            _animator!.Feel(Emotion.Sad, 0.9f, 2f);
+            return;
+        }
+        React(_touch.Poke(ZoneAt(cursor)), cursor);
+    }
+
+    private void React(TouchReaction reaction, Vector2 cursor)
+    {
+        var animator = _animator!;
+        animator.Feel(reaction.Emotion, reaction.Intensity, reaction.Flee ? 5f : 2.5f);
+        if (reaction.Gesture is Gesture gesture)
+            animator.Play(_director.Vary(gesture, reaction.Intensity), now: true);
+        if (reaction.Flee)
+            _brain!.Flee(cursor.X, cursor.Y);
+        else
+            _brain!.Hold(2.5f);
+    }
+
+    /// <summary>Petting and rubbing: the cursor moving back and forth over the character.</summary>
+    private void UpdateTouch(float dt)
+    {
+        var brain = _brain!;
+        var cursor = CursorInWindow();
+        bool over = !_pressed && !_dragging && _tight.Length >= 3 && Geometry2D.IsPointInPolygon(cursor, _tight);
+        float travel = 0f;
+        if (!float.IsNaN(_lastHover.X))
+            travel = cursor.DistanceTo(_lastHover) / _heightPixels;
+        _lastHover = cursor;
+
+        var zone = ZoneAt(cursor);
+        if (_touch.Update(dt, over ? travel : 0f, zone) is TouchReaction reaction)
+        {
+            if (brain.State == MascotState.Lie)
+                brain.Wake();
+            React(reaction, cursor);
+        }
+        _animator!.Petted = _touch.Petting;
+        _animator.PetZone = _touch.Zone;
+        if (_touch.Petting)
+            brain.Hold(1f);
+
+        // Moving the mouse around close to a sleeping character wakes it.
+        if (brain.State == MascotState.Lie)
+        {
+            var centre = new Vector2(brain.X, brain.Y - _heightPixels * 0.12f);
+            _nearTravel = cursor.DistanceTo(centre) < _heightPixels * 0.7f ? _nearTravel + travel : _nearTravel * MathF.Exp(-dt);
+            if (_nearTravel > 0.6f)
+            {
+                _nearTravel = 0f;
+                brain.Wake();
+                _animator.Feel(Emotion.Surprised, 0.6f, 1.5f);
+                _animator.Play(_director.Vary(Gesture.Yawn, 0.6f));
+            }
+        }
+        else
+        {
+            _nearTravel = 0f;
         }
     }
 
@@ -370,7 +546,12 @@ public partial class MascotRoot : Node3D
             MascotState.Falling or MascotState.Jump => brain.Facing * FacingTurn * 0.6f,
             // Side on to the screen edge it is climbing.
             MascotState.Climb or MascotState.Cling => brain.WallSide * MathF.PI / 2f,
-            MascotState.Dragged or MascotState.Sit or MascotState.Tumble => 0f,
+            MascotState.Dragged or MascotState.Sit or MascotState.Tumble or MascotState.Lie => 0f,
+            // Flat on its face: seen from the side.
+            MascotState.Sprawl => brain.Facing * MathF.PI / 2f,
+            MascotState.GetUp => brain.Facing * 0.5f,
+            // Facing the user while talking or being touched.
+            MascotState.Idle when Facing0 => 0f,
             _ => brain.Facing * 0.3f,
         };
         if (_snapshot?.Yaw is float yaw)
@@ -378,6 +559,11 @@ public partial class MascotRoot : Node3D
         _yaw = Mathf.Lerp(_yaw, target, 1f - MathF.Exp(-8f * dt));
         _pivot.Rotation = new Vector3(0f, _yaw, 0f);
     }
+
+    /// <summary>Set while the character should face the user (talking, being petted).</summary>
+    internal bool FaceUser { get; set; }
+
+    private bool Facing0 => FaceUser || _touch.Petting;
 
     private void AimHeadAtCursor()
     {
@@ -408,6 +594,7 @@ public partial class MascotRoot : Node3D
             return;
 
         var tight = _hitShape.Outline(_camera, HitMargin);
+        _tight = tight;
         if (_region.Length >= 3 && Array.TrueForAll(tight, p => Geometry2D.IsPointInPolygon(p, _region)))
             return;
 

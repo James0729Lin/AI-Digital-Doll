@@ -1,4 +1,6 @@
 using System;
+using DigitalDoll.Character;
+using DigitalDoll.Core.Acting;
 using DigitalDoll.Core.Body;
 using DigitalDoll.Core.Mascot;
 using Godot;
@@ -18,6 +20,10 @@ internal sealed class Snapshot
     private int _frame;
     private bool _captured;
 
+    private string? _gesture;
+    private string? _emotion;
+    private bool _talking, _petting;
+
     public Vector2I WindowSize { get; private set; } = new(360, 560);
     public float? Yaw { get; private set; }
     public string? CharacterPath { get; private set; }
@@ -31,7 +37,12 @@ internal sealed class Snapshot
         if (index < 0 || index + 1 >= args.Length)
             return null;
 
-        var snapshot = new Snapshot { _output = args[index + 1] };
+        var snapshot = new Snapshot
+        {
+            _output = args[index + 1],
+            _talking = Array.IndexOf(args, "--talking") >= 0,
+            _petting = Array.IndexOf(args, "--petting") >= 0,
+        };
         if (Array.IndexOf(args, "--body") >= 0)
             snapshot.Body = new BodyShape();
         for (int i = 0; i + 1 < args.Length; i++)
@@ -51,6 +62,12 @@ internal sealed class Snapshot
                 case "--size":
                     var parts = value.Split('x');
                     snapshot.WindowSize = new Vector2I(int.Parse(parts[0]), int.Parse(parts[1]));
+                    break;
+                case "--gesture":
+                    snapshot._gesture = value;
+                    break;
+                case "--emotion":
+                    snapshot._emotion = value;
                     break;
                 case "--character":
                     snapshot.CharacterPath = value;
@@ -107,12 +124,35 @@ internal sealed class Snapshot
                 brain.PlaceAt(centre);
                 brain.SitDown();
                 break;
+            case "lie":
+            case "sprawl":
+            case "getup":
+                brain.Preview(_pose switch { "lie" => MascotState.Lie, "sprawl" => MascotState.Sprawl, _ => MascotState.GetUp });
+                break;
             case "land":
                 brain.BeginDrag();
                 brain.DragTo(centre, window.Y - 2f);
                 brain.EndDrag(0f, 400f);
                 break;
         }
+    }
+
+    /// <summary>Gesture, mood, talking and petting requested on the command line.</summary>
+    public void Act(ProceduralAnimator animator)
+    {
+        animator.Fidgets = false;
+        animator.Talking = _talking;
+        animator.Petted = _petting;
+        if (_emotion != null && PerformanceDirector.EmotionOf(_emotion) is Emotion emotion)
+            animator.Feel(emotion, 1f, 100f);
+        if (_gesture == null)
+            return;
+        var director = new PerformanceDirector(new Random(1));
+        var cue = Enum.TryParse<Gesture>(_gesture.Replace("_", ""), ignoreCase: true, out var gesture)
+            ? director.Vary(gesture)
+            : director.Pick(_gesture);
+        if (cue != null)
+            animator.Play(cue);
     }
 
     public void Tick(MascotRoot root)
