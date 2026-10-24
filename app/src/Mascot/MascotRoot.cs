@@ -24,7 +24,6 @@ public partial class MascotRoot : Node3D
     private const string DefaultCharacter = "res://assets/characters/godette/Godette_vrm_v4.vrm";
     private const string SavedCharacter = "user://characters/current.vrm";
     private const float CharacterHeightPoints = 300f;
-    private const float FacingTurn = 1.1f;
     private const float HitMargin = 5f;
     private const float HitSlack = 6f;
     private const float LeadSeconds = 0.1f;
@@ -52,13 +51,13 @@ public partial class MascotRoot : Node3D
     private readonly Random _random = new();
     private MascotBrain? _brain;
     private Node3D? _model;
-    private HumanoidRig? _rig;
-    private ProceduralAnimator? _animator;
-    private CharacterHitShape? _hitShape;
+    private IMascotBody? _body;
+    private IPerformer? _animator;
 
     private Vector2I _windowSize;
     private float _pixelsPerMetre = 180f;
     private float _heightPixels = CharacterHeightPoints;
+    private float _baseHeightPixels = CharacterHeightPoints;
     private float _modelHeight = 1.6f;
     private float _yaw;
     private float _screenCheck;
@@ -145,7 +144,7 @@ public partial class MascotRoot : Node3D
     public override void _Process(double delta)
     {
         float dt = _snapshot != null ? 1f / 60f : (float)delta;
-        if (_brain == null || _rig == null || _animator == null)
+        if (_brain == null || _body == null || _animator == null)
             return;
 
         if (_snapshot == null)
@@ -253,14 +252,15 @@ public partial class MascotRoot : Node3D
 
     internal MascotBrain? Brain => _brain;
     internal float CharacterHeightPixels => _heightPixels;
-    internal ProceduralAnimator? Animator => _animator;
+    internal IPerformer? Animator => _animator;
+    internal IMascotBody? Body => _body;
 
     /// <summary>Screen position just above the character's head (for the speech bubble).</summary>
     internal Vector2I HeadScreenPosition()
     {
-        if (_rig == null)
+        if (_body == null)
             return GetWindow().Position;
-        var head = _camera.UnprojectPosition(_rig.BoneGlobalPosition("Head"));
+        var head = _camera.UnprojectPosition(_body.HeadPosition);
         float top = _tight.Length > 0 ? _tight.Min(p => p.Y) : head.Y - _heightPixels * 0.12f;
         return GetWindow().Position + new Vector2I((int)head.X, (int)Mathf.Min(top, head.Y));
     }
@@ -298,9 +298,9 @@ public partial class MascotRoot : Node3D
 
     private TouchZone ZoneAt(Vector2 cursor)
     {
-        if (_rig == null)
+        if (_body == null)
             return TouchZone.Body;
-        float neck = _camera.UnprojectPosition(_rig.BoneGlobalPosition("Neck")).Y;
+        float neck = _camera.UnprojectPosition(_body.NeckPosition).Y;
         return cursor.Y < neck ? TouchZone.Head : TouchZone.Body;
     }
 
@@ -393,7 +393,8 @@ public partial class MascotRoot : Node3D
         window.Position = usable.Position;
         window.Size = size;
         _windowSize = size;
-        _heightPixels = CharacterHeightPoints * Mathf.Clamp(scale, 1f, 3f);
+        _baseHeightPixels = CharacterHeightPoints * Mathf.Clamp(scale, 1f, 3f);
+        _heightPixels = _baseHeightPixels * (_body?.SizeFactor ?? 1f);
         UpdateCamera();
         _brain?.SetSurroundings(BuildSurroundings());
 
@@ -406,7 +407,8 @@ public partial class MascotRoot : Node3D
         var window = GetWindow();
         window.Size = snapshot.WindowSize;
         _windowSize = snapshot.WindowSize;
-        _heightPixels = snapshot.WindowSize.Y * 0.8f;
+        _baseHeightPixels = snapshot.WindowSize.Y * 0.8f;
+        _heightPixels = _baseHeightPixels;
     }
 
     /// <summary>The floor, the screen edges and the tops of the visible windows, in window pixels.</summary>
@@ -430,7 +432,7 @@ public partial class MascotRoot : Node3D
 
     private void UpdateCamera()
     {
-        if (_rig == null)
+        if (_body == null)
             return;
         _pixelsPerMetre = _heightPixels / _modelHeight;
         _camera.Projection = Camera3D.ProjectionType.Orthogonal;
@@ -443,6 +445,8 @@ public partial class MascotRoot : Node3D
     {
         if (_snapshot != null)
         {
+            if (_snapshot.Animal is Species animal)
+                return LoadAnimal(animal);
             return _snapshot.Body != null
                 ? AttachCharacter(BodyCharacter.Create(_snapshot.Body), "body (snapshot)")
                 : LoadCharacter(_snapshot.CharacterPath ?? DefaultCharacter, persist: false);
@@ -452,6 +456,7 @@ public partial class MascotRoot : Node3D
         return settings.Character switch
         {
             CharacterSource.Body => LoadBody(),
+            CharacterSource.Animal => LoadAnimal(settings.Animal),
             CharacterSource.Vrm => FileAccess.FileExists(SavedCharacter) && LoadCharacter(SavedCharacter, persist: false),
             _ => LoadCharacter(DefaultCharacter, persist: false),
         };
@@ -498,31 +503,57 @@ public partial class MascotRoot : Node3D
             return false;
         }
 
-        _model?.QueueFree();
-        _model = model;
-        _rig = rig;
-        _hitShape = CharacterHitShape.Measure(model, rig.Skeleton);
-        _region = Array.Empty<Vector2>();
         var expressions = ExpressionRig.Create(model);
-        _animator = new ProceduralAnimator(rig, expressions, _random);
+        var animator = new ProceduralAnimator(rig, expressions, _random);
         GD.Print($"Loaded {label}: expressions [{string.Join(", ", expressions.Names)}]");
 
         // Turn the model so that its forward axis matches the pivot's +Z (toward the camera).
         var forward = model.GlobalBasis.Inverse() * (rig.Skeleton.GlobalBasis * rig.Forward);
         model.Rotation = new Vector3(0f, -Mathf.Atan2(forward.X, forward.Z), 0f);
 
-        _modelHeight = MeasureHeight(model, _pivot);
+        Attach(new HumanBody(model, rig, animator, CharacterHitShape.Measure(model, rig.Skeleton)));
+        return true;
+    }
+
+    /// <summary>Shows an animal instead of the doll.</summary>
+    private bool LoadAnimal(Species species)
+    {
+        var animal = Animals.AnimalBody.Create(species, _random);
+        _pivot.AddChild(animal.Model);
+        Attach(animal);
+        return true;
+    }
+
+    private void Attach(IMascotBody body)
+    {
+        _model?.QueueFree();
+        _model = body.Model;
+        _body = body;
+        _animator = body.Performer;
+        _region = Array.Empty<Vector2>();
+
+        float previous = _heightPixels;
+        // Snapshots frame any character at the same size.
+        _heightPixels = _snapshot != null ? _baseHeightPixels : _baseHeightPixels * body.SizeFactor;
+        _modelHeight = MeasureHeight(body.Model, _pivot);
         UpdateCamera();
-        if (_brain == null)
+
+        // A different size walks, jumps and climbs differently: start a new brain where
+        // the old one stood.
+        if (_brain == null || !Mathf.IsEqualApprox(previous, _heightPixels))
+        {
+            float x = _brain?.X ?? _windowSize.X * 0.7f;
+            bool staying = _brain?.Staying ?? false;
             _brain = new MascotBrain(
                 new MascotTuning
                 {
-                    WalkSpeed = 0.55f * _pixelsPerMetre,
-                    ClimbSpeed = 0.32f * _pixelsPerMetre,
+                    WalkSpeed = body.WalkSpeed * _pixelsPerMetre,
+                    ClimbSpeed = body.ClimbSpeed * _pixelsPerMetre,
                     Height = _heightPixels,
                 },
-                _random, _windowSize.X * 0.7f, BuildSurroundings());
-        return true;
+                _random, x, BuildSurroundings()) { Staying = staying };
+        }
+        _chat?.CharacterChanged(body.Name, body.Persona);
     }
 
     /// <summary>Height of all visible meshes (hair and shoes included) in pivot space.</summary>
@@ -554,20 +585,7 @@ public partial class MascotRoot : Node3D
         float x = _snapshot != null ? _windowSize.X * 0.5f : brain.X;
         _pivot.Position = ScreenToWorld(new Vector2(x, brain.Y));
 
-        float target = brain.State switch
-        {
-            MascotState.Walk => brain.Facing * FacingTurn,
-            MascotState.Falling or MascotState.Jump => brain.Facing * FacingTurn * 0.6f,
-            // Side on to the screen edge it is climbing.
-            MascotState.Climb or MascotState.Cling => brain.WallSide * MathF.PI / 2f,
-            MascotState.Dragged or MascotState.Sit or MascotState.Tumble or MascotState.Lie => 0f,
-            // Flat on its face: seen from the side.
-            MascotState.Sprawl => brain.Facing * MathF.PI / 2f,
-            MascotState.GetUp => brain.Facing * 0.5f,
-            // Facing the user while talking or being touched.
-            MascotState.Idle when Facing0 => 0f,
-            _ => brain.Facing * 0.3f,
-        };
+        float target = _body!.Yaw(brain.State, brain.Facing, brain.WallSide, Facing0);
         if (_snapshot?.Yaw is float yaw)
             target = yaw;
         _yaw = Mathf.Lerp(_yaw, target, 1f - MathF.Exp(-8f * dt));
@@ -581,15 +599,7 @@ public partial class MascotRoot : Node3D
 
     private void AimHeadAtCursor()
     {
-        var rig = _rig!;
-        var head = rig.BoneGlobalPosition("Head");
-        var cursor = ScreenToWorld(CursorInWindow()) + new Vector3(0f, 0f, 0.6f);
-        var local = rig.Skeleton.GlobalBasis.Inverse() * (cursor - head);
-        float forward = local.Dot(rig.Forward);
-        float side = local.Dot(rig.Left);
-        float up = local.Dot(rig.Up);
-        _animator!.LookYaw = Mathf.Atan2(side, Mathf.Max(forward, 0.05f));
-        _animator.LookPitch = Mathf.Atan2(up, new Vector2(forward, side).Length());
+        _body!.LookAt(ScreenToWorld(CursorInWindow()) + new Vector3(0f, 0f, 0.6f));
     }
 
     private void UpdateDrag(float dt)
@@ -604,10 +614,10 @@ public partial class MascotRoot : Node3D
 
     private void UpdateHitRegion()
     {
-        if (_dragging || _hitShape == null)
+        if (_dragging || _body == null)
             return;
 
-        var tight = _hitShape.Outline(_camera, HitMargin);
+        var tight = _body.Outline(_camera, HitMargin);
         _tight = tight;
         if (_region.Length >= 3 && Array.TrueForAll(tight, p => Geometry2D.IsPointInPolygon(p, _region)))
             return;
@@ -620,7 +630,7 @@ public partial class MascotRoot : Node3D
         var brain = _brain!;
         float speed = new Vector2(brain.VelocityX, brain.VelocityY).Length();
         float slack = HitSlack + speed * LeadSeconds;
-        SetMousePassthrough(_hitShape.Outline(_camera, HitMargin + slack));
+        SetMousePassthrough(_body.Outline(_camera, HitMargin + slack));
     }
 
     private void SetMousePassthrough(Vector2[] region)
@@ -645,6 +655,15 @@ public partial class MascotRoot : Node3D
         _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
         _menu.AddCheckItem(Tr("MENU_STAY"), MenuStay);
         _menu.AddItem(Tr("MENU_USE_BODY"), MenuUseBody);
+        var animals = new PopupMenu { Name = "Animals" };
+        foreach (var species in Enum.GetValues<Species>())
+            animals.AddItem(Tr("ANIMAL_" + species.ToString().ToUpperInvariant()), (int)species);
+        animals.IdPressed += id =>
+        {
+            if (LoadAnimal((Species)(int)id))
+                SettingsStore.UseAnimal((Species)(int)id);
+        };
+        _menu.AddSubmenuNodeItem(Tr("MENU_ANIMALS"), animals);
         _menu.AddItem(Tr("MENU_LOAD_CHARACTER"), MenuLoad);
         _menu.AddItem(Tr("MENU_DEFAULT_CHARACTER"), MenuReset);
         _menu.AddSeparator();
@@ -710,7 +729,7 @@ public partial class MascotRoot : Node3D
     }
 
     /// <summary>The current mouse region outline (for snapshots).</summary>
-    internal Vector2[] HitOutline() => _hitShape?.Outline(_camera, HitMargin) ?? Array.Empty<Vector2>();
+    internal Vector2[] HitOutline() => _body?.Outline(_camera, HitMargin) ?? Array.Empty<Vector2>();
 
     internal Image CaptureFrame() => GetViewport().GetTexture().GetImage();
 }

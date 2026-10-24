@@ -1,5 +1,6 @@
 using System;
 using DigitalDoll.Character;
+using DigitalDoll.Core;
 using DigitalDoll.Core.Acting;
 using DigitalDoll.Core.Body;
 using DigitalDoll.Core.Mascot;
@@ -27,6 +28,9 @@ internal sealed class Snapshot
     public Vector2I WindowSize { get; private set; } = new(360, 560);
     public float? Yaw { get; private set; }
     public string? CharacterPath { get; private set; }
+
+    /// <summary>Set by <c>--animal cat|dog|chicken|pig</c>.</summary>
+    public Species? Animal { get; private set; }
 
     /// <summary>Set by <c>--body</c>: show an edited body (adjusted with <c>--set key=value</c>).</summary>
     public BodyShape? Body { get; private set; }
@@ -68,6 +72,9 @@ internal sealed class Snapshot
                     break;
                 case "--emotion":
                     snapshot._emotion = value;
+                    break;
+                case "--animal":
+                    snapshot.Animal = Enum.Parse<Species>(value, ignoreCase: true);
                     break;
                 case "--character":
                     snapshot.CharacterPath = value;
@@ -138,7 +145,7 @@ internal sealed class Snapshot
     }
 
     /// <summary>Gesture, mood, talking and petting requested on the command line.</summary>
-    public void Act(ProceduralAnimator animator)
+    public void Act(IPerformer animator)
     {
         animator.Fidgets = false;
         animator.Talking = _talking;

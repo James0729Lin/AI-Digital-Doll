@@ -161,3 +161,18 @@ msgstr "I can't answer that one."
 
 msgid "ERR_OTHER"
 msgstr "Something went wrong: {0}"
+
+msgid "MENU_ANIMALS"
+msgstr "Animal mode"
+
+msgid "ANIMAL_CAT"
+msgstr "Cat"
+
+msgid "ANIMAL_DOG"
+msgstr "Dog"
+
+msgid "ANIMAL_CHICKEN"
+msgstr "Chicken"
+
+msgid "ANIMAL_PIG"
+msgstr "Pig"

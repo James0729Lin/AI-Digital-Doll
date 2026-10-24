@@ -12,7 +12,7 @@ namespace DigitalDoll.Character;
 /// layered on top. Angles are in radians, in the character frame given by
 /// <see cref="HumanoidRig"/>.
 /// </summary>
-public sealed partial class ProceduralAnimator
+public sealed partial class ProceduralAnimator : IPerformer
 {
     private const float ArmsDown = 1.22f;
     private const float WeightRate = 9f;

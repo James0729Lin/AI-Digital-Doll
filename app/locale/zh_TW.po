@@ -161,3 +161,18 @@ msgstr "這個問題我沒辦法回答耶。"
 
 msgid "ERR_OTHER"
 msgstr "出了點問題：{0}"
+
+msgid "MENU_ANIMALS"
+msgstr "動物模式"
+
+msgid "ANIMAL_CAT"
+msgstr "小貓"
+
+msgid "ANIMAL_DOG"
+msgstr "小狗"
+
+msgid "ANIMAL_CHICKEN"
+msgstr "小雞"
+
+msgid "ANIMAL_PIG"
+msgstr "小豬"

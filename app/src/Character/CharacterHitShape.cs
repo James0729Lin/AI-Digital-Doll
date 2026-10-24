@@ -291,7 +291,7 @@ public sealed class CharacterHitShape
         }
     }
 
-    private static Vector2[]? Union(Vector2[] a, Vector2[] b)
+    internal static Vector2[]? Union(Vector2[] a, Vector2[] b)
     {
         Vector2[]? outer = null;
         foreach (var polygon in Geometry2D.MergePolygons(a, b))
@@ -305,7 +305,7 @@ public sealed class CharacterHitShape
         return outer;
     }
 
-    private static Vector2[] Grow(Vector2[] polygon, float margin)
+    internal static Vector2[] Grow(Vector2[] polygon, float margin)
     {
         if (polygon.Length < 3 || margin <= 0f)
             return polygon;

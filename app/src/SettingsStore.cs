@@ -22,6 +22,14 @@ public static class SettingsStore
             file.StoreString(settings.ToJson());
     }
 
+    public static void UseAnimal(Species species)
+    {
+        var settings = Load();
+        settings.Character = CharacterSource.Animal;
+        settings.Animal = species;
+        Save(settings);
+    }
+
     public static void UseCharacter(CharacterSource source)
     {
         var settings = Load();

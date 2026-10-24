@@ -24,6 +24,7 @@ public partial class ChatController : Node
     private readonly Conversation _conversation = new();
     private PerformanceDirector _director = null!;
 
+    private string? _name, _persona;
     private CancellationTokenSource? _request;
     private ReplyScript? _script;
     private string _source = "";
@@ -48,6 +49,7 @@ public partial class ChatController : Node
         _settingsWindow = new AiSettingsWindow();
         AddChild(_settingsWindow);
         _settingsWindow.Saved += saved => _settings = saved;
+        CharacterChanged(root.Body?.Name, root.Body?.Persona);
 
         // Development aid: --ask "question" asks the default AI shortly after start,
         // --ai-settings opens the settings window.
@@ -57,6 +59,16 @@ public partial class ChatController : Node
             GetTree().CreateTimer(1.5).Timeout += () => Ask(args[ask + 1], null);
         if (Array.IndexOf(args, "--ai-settings") >= 0)
             GetTree().CreateTimer(1.0).Timeout += OpenSettings;
+    }
+
+    /// <summary>A different character: animals talk as themselves; the history starts afresh.</summary>
+    public void CharacterChanged(string? name, string? persona)
+    {
+        if (name == _name && persona == _persona)
+            return;
+        _name = name;
+        _persona = persona;
+        _conversation.Clear();
     }
 
     public void OpenChat() => _input.Open(_settings, _root.HeadScreenPosition() + new Vector2I(0, (int)(_root.CharacterHeightPixels * 1.05f)));
@@ -148,7 +160,7 @@ public partial class ChatController : Node
             return;
 
         _conversation.AddUser(text);
-        var request = new ChatRequest(config.Model, Conversation.SystemPrompt(_settings), _conversation.Turns);
+        var request = new ChatRequest(config.Model, Conversation.SystemPrompt(_name == null ? _settings : WithName(_settings, _name), _persona), _conversation.Turns);
         var cancel = _request = new CancellationTokenSource();
         var script = new ReplyScript();
         _source = config.Name;
@@ -197,6 +209,14 @@ public partial class ChatController : Node
                 _request = null;
         }
     }
+
+    private static AiSettings WithName(AiSettings settings, string name) => new()
+    {
+        CharacterName = name,
+        Personality = settings.Personality,
+        Providers = settings.Providers,
+        DefaultProvider = settings.DefaultProvider,
+    };
 
     private void BeginReply(ReplyScript script)
     {
