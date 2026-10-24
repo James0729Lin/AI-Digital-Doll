@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: 4.7.2
+  GODOT_SHA512: 1855960b27ee3ef5e66e5e228cced69d55637b24334a7411162687dcd077d8f9f645348cdb8eae984bec8135d49ed855a1e3a16476786b8bce60774fd8402d13
+  TEMPLATES_SHA512: bb5c41d72370ed743660361f6228006f808ab04ca33abdc545d740b044f3fe057f32ae8cb7873a1bc86ddcd82ae683b9f6dfdfe4179852f2c0f1acde2ff6bd5a
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Unit tests
+        run: dotnet test tests/DigitalDoll.Core.Tests --nologo
+
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-mono-win-linux
+
+      - name: Download Godot and export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          base=https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable
+          mkdir -p ~/godot && cd ~/godot
+          curl -sSLf -o godot.zip "$base/Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64.zip"
+          echo "$GODOT_SHA512  godot.zip" | sha512sum -c -
+          curl -sSLf -o templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_mono_export_templates.tpz"
+          echo "$TEMPLATES_SHA512  templates.tpz" | sha512sum -c -
+          unzip -q godot.zip && unzip -q templates.tpz
+          rm godot.zip templates.tpz
+          # Keep only the templates this project exports to.
+          find templates -type f ! -name 'windows_*_x86_64*' ! -name 'linux_*.x86_64' \
+            ! -name 'version.txt' ! -name 'icudt_godot.dat' -delete
+
+      - name: Install Godot
+        run: |
+          dest=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable.mono
+          mkdir -p "$(dirname "$dest")"
+          ln -sfn ~/godot/templates "$dest"
+          bin=~/godot/Godot_v${GODOT_VERSION}-stable_mono_linux_x86_64
+          ln -sfn "$bin/Godot_v${GODOT_VERSION}-stable_mono_linux.x86_64" "$bin/godot"
+          echo "$bin" >> "$GITHUB_PATH"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri > /dev/null
+
+      - name: Import assets
+        working-directory: app
+        run: |
+          godot --headless --import
+          dotnet build --nologo
+
+      - name: Export
+        working-directory: app
+        run: |
+          mkdir -p ../build/windows ../build/linux
+          godot --headless --export-release "Windows" ../build/windows/AIDigitalDoll.exe
+          godot --headless --export-release "Linux (smoke test)" ../build/linux/AIDigitalDoll.x86_64
+          test -s ../build/windows/AIDigitalDoll.exe
+
+      - name: Smoke test the exported build
+        run: |
+          mkdir -p build/snapshots
+          for pose in idle walk drag; do
+            timeout 120 xvfb-run -a -s "-screen 0 1280x1024x24" \
+              build/linux/AIDigitalDoll.x86_64 --rendering-driver opengl3 -- \
+              --snapshot "$PWD/build/snapshots/$pose.png" --pose "$pose" --time 1.0
+            python3 tools/check_snapshot.py "build/snapshots/$pose.png"
+          done
+
+      - name: Package
+        run: |
+          cp LICENSE THIRD_PARTY_NOTICES.md build/windows/
+          cd build/windows && zip -qr ../AIDigitalDoll-windows-x64.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AIDigitalDoll-windows-x64
+          path: build/AIDigitalDoll-windows-x64.zip
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapshots
+          path: build/snapshots
+          retention-days: 7

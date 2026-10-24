@@ -1,0 +1,19 @@
+msgid ""
+msgstr ""
+"Language: en\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "MENU_CALL_OVER"
+msgstr "Come here"
+
+msgid "MENU_LOAD_CHARACTER"
+msgstr "Load VRM character…"
+
+msgid "MENU_DEFAULT_CHARACTER"
+msgstr "Use default character"
+
+msgid "MENU_QUIT"
+msgstr "Quit"
+
+msgid "DIALOG_OPEN_CHARACTER"
+msgstr "Choose a VRM character file"

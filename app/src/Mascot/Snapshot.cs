@@ -1,0 +1,101 @@
+using System;
+using DigitalDoll.Core.Mascot;
+using Godot;
+
+namespace DigitalDoll.Mascot;
+
+/// <summary>
+/// Development aid: renders one frame of a given behaviour to a PNG and quits, so
+/// poses can be checked without a desktop session. Example:
+/// <c>godot --path app -- --snapshot out.png --pose walk --time 1.2 --yaw 1.57</c>
+/// </summary>
+internal sealed class Snapshot
+{
+    private string _output = "";
+    private string _pose = "idle";
+    private float _time = 1f;
+    private int _frame;
+    private bool _captured;
+
+    public Vector2I WindowSize { get; private set; } = new(360, 560);
+    public float? Yaw { get; private set; }
+    public string? CharacterPath { get; private set; }
+
+    public static Snapshot? FromCommandLine(string[] args)
+    {
+        int index = Array.IndexOf(args, "--snapshot");
+        if (index < 0 || index + 1 >= args.Length)
+            return null;
+
+        var snapshot = new Snapshot { _output = args[index + 1] };
+        for (int i = 0; i + 1 < args.Length; i++)
+        {
+            string value = args[i + 1];
+            switch (args[i])
+            {
+                case "--pose":
+                    snapshot._pose = value;
+                    break;
+                case "--time":
+                    snapshot._time = float.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+                    break;
+                case "--yaw":
+                    snapshot.Yaw = float.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+                    break;
+                case "--size":
+                    var parts = value.Split('x');
+                    snapshot.WindowSize = new Vector2I(int.Parse(parts[0]), int.Parse(parts[1]));
+                    break;
+                case "--character":
+                    snapshot.CharacterPath = value;
+                    break;
+            }
+        }
+        return snapshot;
+    }
+
+    public void Begin(MascotBrain brain, Vector2I window)
+    {
+        float centre = window.X * 0.5f;
+        brain.PlaceAt(centre);
+        switch (_pose)
+        {
+            case "walk":
+                // Endless floor; the root keeps the character centred in the frame.
+                brain.SetGround(new Ground(-1e6f, 1e6f, brain.Ground.FloorY));
+                brain.WalkTo(1e5f);
+                break;
+            case "drag":
+                brain.BeginDrag();
+                brain.DragTo(centre, window.Y * 0.85f);
+                break;
+            case "fall":
+                brain.BeginDrag();
+                brain.DragTo(centre, window.Y * 0.45f);
+                brain.EndDrag(0f, 0f);
+                break;
+            case "land":
+                brain.BeginDrag();
+                brain.DragTo(centre, window.Y - 2f);
+                brain.EndDrag(0f, 400f);
+                break;
+        }
+    }
+
+    public void Tick(MascotRoot root)
+    {
+        _frame++;
+        if (_captured || _frame < _time * 60f)
+            return;
+        _captured = true;
+        Action? capture = null;
+        capture = () =>
+        {
+            RenderingServer.FramePostDraw -= capture;
+            var error = root.CaptureFrame().SavePng(_output);
+            GD.Print($"snapshot {_pose} t={_time} -> {_output} ({error})");
+            root.GetTree().Quit();
+        };
+        RenderingServer.FramePostDraw += capture;
+    }
+}

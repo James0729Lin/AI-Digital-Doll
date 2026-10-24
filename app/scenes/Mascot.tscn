@@ -1,0 +1,43 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://src/Mascot/MascotRoot.cs" id="1_root"]
+[ext_resource type="Texture2D" path="res://assets/icon.svg" id="2_icon"]
+
+[sub_resource type="Environment" id="Environment_main"]
+background_mode = 1
+background_color = Color(0, 0, 0, 0)
+ambient_light_source = 2
+ambient_light_color = Color(0.85, 0.85, 0.9, 1)
+ambient_light_energy = 0.55
+tonemap_mode = 0
+
+[node name="Mascot" type="Node3D"]
+script = ExtResource("1_root")
+
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_main")
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 10)
+projection = 1
+size = 6.0
+near = 0.1
+far = 40.0
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 0, 0)
+light_energy = 1.1
+
+[node name="Pivot" type="Node3D" parent="."]
+
+[node name="Tray" type="StatusIndicator" parent="."]
+tooltip = "AI Digital Doll"
+icon = ExtResource("2_icon")
+menu = NodePath("../TrayMenu")
+
+[node name="TrayMenu" type="PopupMenu" parent="."]
+
+[node name="OpenCharacterDialog" type="FileDialog" parent="."]
+file_mode = 0
+access = 2
+use_native_dialog = true

@@ -1,0 +1,58 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="AI Digital Doll"
+config/description="3D desktop companion connected to AI assistants"
+config/version="0.1.0"
+run/main_scene="res://scenes/Mascot.tscn"
+config/features=PackedStringArray("4.7", "C#")
+config/icon="res://assets/icon.svg"
+boot_splash/show_image=false
+boot_splash/bg_color=Color(0, 0, 0, 0)
+run/max_fps=60
+config/use_custom_user_dir=true
+config/custom_user_dir_name="AIDigitalDoll"
+
+[display]
+
+window/size/viewport_width=320
+window/size/viewport_height=480
+window/size/borderless=true
+window/size/always_on_top=true
+window/size/transparent=true
+window/size/no_focus=false
+window/per_pixel_transparency/allowed=true
+window/subwindows/embed_subwindows=false
+window/energy_saving/keep_screen_on=false
+window/vsync/vsync_mode=1
+
+[dotnet]
+
+project/assembly_name="DigitalDoll"
+project/solution_directory=".."
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/Godot-MToon-Shader/plugin.cfg", "res://addons/vrm/plugin.cfg")
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://locale/zh_TW.po", "res://locale/en.po")
+locale/fallback="en"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+viewport/transparent_background=true
+anti_aliasing/quality/msaa_3d=2
+textures/vram_compression/import_etc2_astc=false

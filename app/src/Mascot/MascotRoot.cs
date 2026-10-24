@@ -1,0 +1,403 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using DigitalDoll.Character;
+using DigitalDoll.Core.Geometry;
+using DigitalDoll.Core.Mascot;
+using DigitalDoll.Platform;
+using Godot;
+using NVector2 = System.Numerics.Vector2;
+
+namespace DigitalDoll.Mascot;
+
+/// <summary>
+/// Desktop mode: a transparent, always-on-top window covering the usable area of a
+/// screen, with the character standing on the taskbar. Only the area around the
+/// character receives the mouse; everything else passes through to the desktop.
+/// </summary>
+public partial class MascotRoot : Node3D
+{
+    private const string DefaultCharacter = "res://assets/characters/godette/Godette_vrm_v4.vrm";
+    private const string SavedCharacter = "user://characters/current.vrm";
+    private const float CharacterHeightPoints = 300f;
+    private const float FacingTurn = 1.1f;
+
+    private const int MenuCallOver = 0;
+    private const int MenuLoad = 1;
+    private const int MenuReset = 2;
+    private const int MenuQuit = 3;
+
+    private Camera3D _camera = null!;
+    private Node3D _pivot = null!;
+    private PopupMenu _menu = null!;
+    private FileDialog _fileDialog = null!;
+
+    private readonly Random _random = new();
+    private MascotBrain? _brain;
+    private Node3D? _model;
+    private HumanoidRig? _rig;
+    private ProceduralAnimator? _animator;
+
+    private Vector2I _windowSize;
+    private float _pixelsPerMetre = 180f;
+    private float _heightPixels = CharacterHeightPoints;
+    private float _modelHeight = 1.6f;
+    private float _yaw;
+    private float _screenCheck;
+    private Vector2[] _region = Array.Empty<Vector2>();
+
+    private bool _dragging;
+    private Vector2 _grabOffset;
+    private Vector2 _lastCursor;
+    private Vector2 _dragVelocity;
+
+    private Snapshot? _snapshot;
+
+    public override void _Ready()
+    {
+        _camera = GetNode<Camera3D>("Camera");
+        _pivot = GetNode<Node3D>("Pivot");
+        _menu = GetNode<PopupMenu>("TrayMenu");
+        _fileDialog = GetNode<FileDialog>("OpenCharacterDialog");
+
+        _snapshot = Snapshot.FromCommandLine(OS.GetCmdlineUserArgs());
+        if (_snapshot != null)
+            ConfigureSnapshotWindow(_snapshot);
+        else
+            ConfigureDesktopWindow();
+
+        BuildMenu();
+        GetNode<StatusIndicator>("Tray").Pressed += OnTrayPressed;
+        _fileDialog.FileSelected += path => LoadCharacter(path, persist: true);
+        GetWindow().FilesDropped += files =>
+        {
+            var vrm = files.FirstOrDefault(f => f.EndsWith(".vrm", StringComparison.OrdinalIgnoreCase));
+            if (vrm != null)
+                LoadCharacter(vrm, persist: true);
+        };
+
+        string start = _snapshot?.CharacterPath
+            ?? (FileAccess.FileExists(SavedCharacter) ? SavedCharacter : DefaultCharacter);
+        if (!LoadCharacter(start, persist: false) && start != DefaultCharacter)
+            LoadCharacter(DefaultCharacter, persist: false);
+
+        _snapshot?.Begin(_brain!, _windowSize);
+    }
+
+    public override void _Process(double delta)
+    {
+        float dt = _snapshot != null ? 1f / 60f : (float)delta;
+        if (_brain == null || _rig == null || _animator == null)
+            return;
+
+        if (_snapshot == null)
+        {
+            _screenCheck -= dt;
+            if (_screenCheck <= 0f)
+            {
+                _screenCheck = 2f;
+                ConfigureDesktopWindow();
+            }
+        }
+
+        if (_dragging)
+            UpdateDrag(dt);
+
+        _brain.Update(dt);
+        PlaceCharacter(dt);
+
+        _animator.LookYaw = 0f;
+        _animator.LookPitch = 0f;
+        if (_brain.State == MascotState.Idle && _snapshot == null)
+            AimHeadAtCursor();
+        _animator.Update(dt, _brain.State, _brain.VelocityX / _pixelsPerMetre, _dragVelocity.X / _pixelsPerMetre);
+
+        if (_snapshot == null)
+        {
+            UpdateHitRegion();
+            bool calm = _brain.State == MascotState.Idle && !_dragging;
+            Engine.MaxFps = calm ? 30 : 60;
+        }
+        else
+        {
+            _snapshot.Tick(this);
+        }
+    }
+
+    public override void _Input(InputEvent @event)
+    {
+        if (_brain == null || _snapshot != null)
+            return;
+
+        if (@event is InputEventMouseButton button)
+        {
+            if (button.ButtonIndex == MouseButton.Left && button.Pressed)
+            {
+                _dragging = true;
+                _lastCursor = CursorInWindow();
+                _grabOffset = _lastCursor - new Vector2(_brain.X, _brain.Y);
+                _dragVelocity = Vector2.Zero;
+                _brain.BeginDrag();
+                SetMousePassthrough(Array.Empty<Vector2>());
+            }
+            else if (button.ButtonIndex == MouseButton.Left && !button.Pressed && _dragging)
+            {
+                _dragging = false;
+                _brain.EndDrag(_dragVelocity.X, Mathf.Min(_dragVelocity.Y, 0f));
+            }
+            else if (button.ButtonIndex == MouseButton.Right && button.Pressed)
+            {
+                ShowMenu(DisplayServer.MouseGetPosition());
+            }
+        }
+    }
+
+    private void ConfigureDesktopWindow()
+    {
+        var window = GetWindow();
+        int screen = window.CurrentScreen;
+        var usable = DisplayServer.ScreenGetUsableRect(screen);
+        // One pixel short of the work area: a window that exactly covers it is treated as
+        // full screen, which stops an auto-hidden taskbar from appearing.
+        var size = new Vector2I(usable.Size.X, Math.Max(usable.Size.Y - 1, 100));
+        float scale = DisplayServer.ScreenGetDpi(screen) / 96f;
+
+        bool changed = window.Position != usable.Position || window.Size != size || _windowSize != size;
+        if (!changed && _brain != null)
+            return;
+
+        window.Position = usable.Position;
+        window.Size = size;
+        _windowSize = size;
+        _heightPixels = CharacterHeightPoints * Mathf.Clamp(scale, 1f, 3f);
+        UpdateCamera();
+        _brain?.SetGround(GroundForWindow());
+
+        if (_brain == null)
+            WindowsNative.HideFromTaskbar(DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle));
+    }
+
+    private void ConfigureSnapshotWindow(Snapshot snapshot)
+    {
+        var window = GetWindow();
+        window.Size = snapshot.WindowSize;
+        _windowSize = snapshot.WindowSize;
+        _heightPixels = snapshot.WindowSize.Y * 0.8f;
+    }
+
+    private Ground GroundForWindow() => new(0f, _windowSize.X, _windowSize.Y - 1f);
+
+    private void UpdateCamera()
+    {
+        if (_rig == null)
+            return;
+        _pixelsPerMetre = _heightPixels / _modelHeight;
+        _camera.Projection = Camera3D.ProjectionType.Orthogonal;
+        _camera.KeepAspect = Camera3D.KeepAspectEnum.Height;
+        _camera.Size = _windowSize.Y / _pixelsPerMetre;
+        _camera.Position = new Vector3(0f, 0f, 10f);
+    }
+
+    private bool LoadCharacter(string path, bool persist)
+    {
+        var model = VrmLoader.Load(path);
+        if (model == null)
+            return false;
+
+        _pivot.AddChild(model);
+        var rig = HumanoidRig.Create(model);
+        if (rig == null)
+        {
+            GD.PushError($"{path} has no humanoid skeleton");
+            model.QueueFree();
+            return false;
+        }
+
+        _model?.QueueFree();
+        _model = model;
+        _rig = rig;
+        var expressions = ExpressionRig.Create(model);
+        _animator = new ProceduralAnimator(rig, expressions, _random);
+        GD.Print($"Loaded {path}: expressions [{string.Join(", ", expressions.Names)}]");
+
+        // Turn the model so that its forward axis matches the pivot's +Z (toward the camera).
+        var forward = model.GlobalBasis.Inverse() * (rig.Skeleton.GlobalBasis * rig.Forward);
+        model.Rotation = new Vector3(0f, -Mathf.Atan2(forward.X, forward.Z), 0f);
+
+        _modelHeight = MeasureHeight(model, _pivot);
+        UpdateCamera();
+        if (_brain == null)
+            _brain = new MascotBrain(new MascotTuning { WalkSpeed = 0.55f * _pixelsPerMetre }, _random,
+                _windowSize.X * 0.7f, GroundForWindow());
+
+        if (persist)
+            SaveCharacter(path);
+        return true;
+    }
+
+    /// <summary>Height of all visible meshes (hair and shoes included) in pivot space.</summary>
+    private static float MeasureHeight(Node3D model, Node3D space)
+    {
+        var toSpace = space.GlobalTransform.AffineInverse();
+        float top = float.MinValue, bottom = float.MaxValue;
+        foreach (var node in model.FindChildren("*", "MeshInstance3D", true, false))
+        {
+            var mesh = (MeshInstance3D)node;
+            var box = toSpace * mesh.GlobalTransform * mesh.GetAabb();
+            top = Mathf.Max(top, box.End.Y);
+            bottom = Mathf.Min(bottom, box.Position.Y);
+        }
+        return top > bottom ? top - bottom : 1.6f;
+    }
+
+    private static void SaveCharacter(string path)
+    {
+        DirAccess.MakeDirRecursiveAbsolute(ProjectSettings.GlobalizePath("user://characters"));
+        string target = ProjectSettings.GlobalizePath(SavedCharacter);
+        if (ProjectSettings.GlobalizePath(path) != target)
+            DirAccess.CopyAbsolute(path, target);
+    }
+
+    private void PlaceCharacter(float dt)
+    {
+        var brain = _brain!;
+        float x = _snapshot != null ? _windowSize.X * 0.5f : brain.X;
+        _pivot.Position = ScreenToWorld(new Vector2(x, brain.Y));
+
+        float target = brain.State switch
+        {
+            MascotState.Walk => brain.Facing * FacingTurn,
+            MascotState.Falling => brain.Facing * FacingTurn * 0.6f,
+            MascotState.Dragged => 0f,
+            _ => brain.Facing * 0.3f,
+        };
+        if (_snapshot?.Yaw is float yaw)
+            target = yaw;
+        _yaw = Mathf.Lerp(_yaw, target, 1f - MathF.Exp(-8f * dt));
+        _pivot.Rotation = new Vector3(0f, _yaw, 0f);
+    }
+
+    private void AimHeadAtCursor()
+    {
+        var rig = _rig!;
+        var head = rig.BoneGlobalPosition("Head");
+        var cursor = ScreenToWorld(CursorInWindow()) + new Vector3(0f, 0f, 0.6f);
+        var local = rig.Skeleton.GlobalBasis.Inverse() * (cursor - head);
+        float forward = local.Dot(rig.Forward);
+        float side = local.Dot(rig.Left);
+        float up = local.Dot(rig.Up);
+        _animator!.LookYaw = Mathf.Atan2(side, Mathf.Max(forward, 0.05f));
+        _animator.LookPitch = Mathf.Atan2(up, new Vector2(forward, side).Length());
+    }
+
+    private void UpdateDrag(float dt)
+    {
+        var cursor = CursorInWindow();
+        if (dt > 0f)
+            _dragVelocity = _dragVelocity.Lerp((cursor - _lastCursor) / dt, 1f - MathF.Exp(-12f * dt));
+        _lastCursor = cursor;
+        var feet = cursor - _grabOffset;
+        _brain!.DragTo(feet.X, Mathf.Min(feet.Y, _windowSize.Y - 1f));
+    }
+
+    private void UpdateHitRegion()
+    {
+        if (_dragging)
+            return;
+
+        var points = CharacterOutline();
+        float margin = _heightPixels * 0.1f + 6f;
+        var tight = HitRegion.Build(points, margin, ToNumerics(_windowSize));
+        var current = _region.Select(ToNumerics).ToArray();
+        if (current.Length >= 3 && HitRegion.ContainsAll(current, tight))
+            return;
+
+        // Grow the region with some slack so a walking character does not need a new
+        // window region every frame.
+        float slack = _brain!.State == MascotState.Falling ? 0f : _heightPixels * 0.12f;
+        var region = HitRegion.Build(points, margin + slack, ToNumerics(_windowSize));
+        SetMousePassthrough(region.Select(p => new Vector2(p.X, p.Y)).ToArray());
+    }
+
+    private List<NVector2> CharacterOutline()
+    {
+        var rig = _rig!;
+        var points = new List<NVector2>();
+        foreach (var p in rig.BoneGlobalPositions())
+            points.Add(ToNumerics(_camera.UnprojectPosition(p)));
+
+        // Bones stop inside the head; add the crown and the hair around it.
+        var head = rig.BoneGlobalPosition("Head");
+        float crown = _pivot.GlobalPosition.Y + _modelHeight - head.Y;
+        var headScreen = _camera.UnprojectPosition(head);
+        float radius = crown * _pixelsPerMetre * 0.6f;
+        float topY = headScreen.Y - crown * _pixelsPerMetre;
+        points.Add(new NVector2(headScreen.X - radius, topY));
+        points.Add(new NVector2(headScreen.X + radius, topY));
+        points.Add(new NVector2(headScreen.X - radius, headScreen.Y));
+        points.Add(new NVector2(headScreen.X + radius, headScreen.Y));
+        return points;
+    }
+
+    private void SetMousePassthrough(Vector2[] region)
+    {
+        _region = region;
+        DisplayServer.WindowSetMousePassthrough(region);
+    }
+
+    private Vector3 ScreenToWorld(Vector2 p) =>
+        new((p.X - _windowSize.X * 0.5f) / _pixelsPerMetre, (_windowSize.Y * 0.5f - p.Y) / _pixelsPerMetre, 0f);
+
+    private Vector2 CursorInWindow() => DisplayServer.MouseGetPosition() - GetWindow().Position;
+
+    private void BuildMenu()
+    {
+        _menu.Clear();
+        _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
+        _menu.AddItem(Tr("MENU_LOAD_CHARACTER"), MenuLoad);
+        _menu.AddItem(Tr("MENU_DEFAULT_CHARACTER"), MenuReset);
+        _menu.AddSeparator();
+        _menu.AddItem(Tr("MENU_QUIT"), MenuQuit);
+        _menu.IdPressed += OnMenu;
+
+        _fileDialog.Title = Tr("DIALOG_OPEN_CHARACTER");
+        _fileDialog.Filters = new[] { "*.vrm ; VRM" };
+    }
+
+    private void ShowMenu(Vector2I screenPosition)
+    {
+        _menu.Position = screenPosition;
+        _menu.Popup();
+    }
+
+    private void OnMenu(long id)
+    {
+        switch (id)
+        {
+            case MenuCallOver:
+                _brain?.WalkTo(CursorInWindow().X);
+                break;
+            case MenuLoad:
+                _fileDialog.Popup();
+                break;
+            case MenuReset:
+                DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(SavedCharacter));
+                LoadCharacter(DefaultCharacter, persist: false);
+                break;
+            case MenuQuit:
+                GetTree().Quit();
+                break;
+        }
+    }
+
+    private void OnTrayPressed(long mouseButton, Vector2I position)
+    {
+        if (mouseButton == (long)MouseButton.Left)
+            _brain?.WalkTo(_windowSize.X * 0.5f);
+    }
+
+    internal Image CaptureFrame() => GetViewport().GetTexture().GetImage();
+
+    private static NVector2 ToNumerics(Vector2 v) => new(v.X, v.Y);
+    private static NVector2 ToNumerics(Vector2I v) => new(v.X, v.Y);
+}

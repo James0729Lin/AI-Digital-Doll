@@ -1,0 +1,19 @@
+msgid ""
+msgstr ""
+"Language: zh_TW\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "MENU_CALL_OVER"
+msgstr "過來這裡"
+
+msgid "MENU_LOAD_CHARACTER"
+msgstr "載入 VRM 角色…"
+
+msgid "MENU_DEFAULT_CHARACTER"
+msgstr "使用預設角色"
+
+msgid "MENU_QUIT"
+msgstr "結束"
+
+msgid "DIALOG_OPEN_CHARACTER"
+msgstr "選擇 VRM 角色檔"

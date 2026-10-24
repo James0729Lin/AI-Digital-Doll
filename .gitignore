@@ -1,0 +1,11 @@
+# Godot
+app/.godot/
+app/export/
+*.translation
+# .NET
+bin/
+obj/
+*.user
+.vs/
+# Builds
+build/
