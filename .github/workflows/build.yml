@@ -77,8 +77,8 @@ jobs:
           for pose in idle walk drag; do
             timeout 120 xvfb-run -a -s "-screen 0 1280x1024x24" \
               build/linux/AIDigitalDoll.x86_64 --rendering-driver opengl3 -- \
-              --snapshot "$PWD/build/snapshots/$pose.png" --pose "$pose" --time 1.0
-            python3 tools/check_snapshot.py "build/snapshots/$pose.png"
+              --snapshot "$PWD/build/snapshots/$pose.png" --pose "$pose" --time 1.0 | tee "build/snapshots/$pose.log"
+            python3 tools/check_snapshot.py "build/snapshots/$pose.png" mascot "build/snapshots/$pose.log"
           done
           timeout 180 xvfb-run -a -s "-screen 0 1600x1000x24" \
             build/linux/AIDigitalDoll.x86_64 --rendering-driver opengl3 -- \

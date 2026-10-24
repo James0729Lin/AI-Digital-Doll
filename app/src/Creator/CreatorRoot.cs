@@ -43,6 +43,7 @@ public partial class CreatorRoot : Control
     private bool _sliderDragging;
     private bool _refreshing;
     private bool _zh;
+    private bool _framingFace;
 
     private float _yaw, _pitch = -0.05f, _distance = 3.6f, _targetY = 0.85f;
     private float _goalYaw, _goalPitch = -0.05f, _goalDistance = 3.6f, _goalTargetY = 0.85f;
@@ -121,7 +122,10 @@ public partial class CreatorRoot : Control
     {
         int index = BodyCatalog.Groups.ToList().FindIndex(g => g.Id == group);
         if (index >= 0)
+        {
             _tabs.CurrentTab = index;
+            _framingFace = BodyCatalog.Groups[index].Section == "face";
+        }
     }
 
     internal void SetView(float yaw, string frame)
@@ -269,6 +273,7 @@ public partial class CreatorRoot : Control
         (_goalTargetY, _goalDistance) = frame switch
         {
             "upper" => (h * 0.72f, h * 1.05f),
+            "face" => (h * 0.925f, h * 0.38f),
             "lower" => (h * 0.3f, h * 1.25f),
             _ => (h * 0.5f, h * 2.15f),
         };
@@ -360,6 +365,18 @@ public partial class CreatorRoot : Control
         column.AddChild(toggles);
 
         _tabs = new TabContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        _tabs.TabChanged += tab =>
+        {
+            // Close in on the face for facial tabs, step back for body tabs.
+            if (_refreshing || tab < 0 || tab >= BodyCatalog.Groups.Count)
+                return;
+            bool face = BodyCatalog.Groups[(int)tab].Section == "face";
+            if (face != _framingFace)
+            {
+                _framingFace = face;
+                FrameBody(face ? "face" : "full");
+            }
+        };
         column.AddChild(_tabs);
 
         var colours = new GridContainer { Columns = 2 };
@@ -453,6 +470,7 @@ public partial class CreatorRoot : Control
         AddButton(frames, Text("全身", "Full body"), () => FrameBody("full"));
         AddButton(frames, Text("上半身", "Upper body"), () => FrameBody("upper"));
         AddButton(frames, Text("下半身", "Lower body"), () => FrameBody("lower"));
+        AddButton(frames, Text("臉部", "Face"), () => FrameBody("face"));
         overlay.AddChild(frames);
 
         _heightLabel = new Label();

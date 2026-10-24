@@ -58,7 +58,31 @@ def check_editor(path, width, height, rows):
         sys.exit("body not visible in the editor snapshot")
 
 
-def main(path, mode="mascot"):
+def inside(polygon, x, y):
+    result = False
+    j = len(polygon) - 1
+    for i in range(len(polygon)):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi:
+            result = not result
+        j = i
+    return result
+
+
+def check_hit_region(path, rows, outline_file):
+    """Every drawn pixel must lie inside the mouse region (Windows clips the rest)."""
+    text = open(outline_file).read().split("hit outline:")[-1].split()
+    polygon = [tuple(float(v) for v in p.split(",")) for p in text if "," in p]
+    clipped = sum(
+        1 for y, row in enumerate(rows) for x in range(len(row) // 4)
+        if row[x * 4 + 3] > 10 and not inside(polygon, x + 0.5, y + 0.5))
+    print(f"{path}: {clipped} drawn pixels outside the mouse region")
+    if clipped > 20:
+        sys.exit("the mouse region clips the character")
+
+
+def main(path, mode="mascot", outline_file=None):
     width, height, rows = read_rgba(path)
     if mode == "editor":
         check_editor(path, width, height, rows)
@@ -71,7 +95,9 @@ def main(path, mode="mascot"):
         sys.exit("background is not transparent")
     if not 0.05 < coverage < 0.9:
         sys.exit("character not visible in the snapshot")
+    if outline_file:
+        check_hit_region(path, rows, outline_file)
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    main(*sys.argv[1:4])

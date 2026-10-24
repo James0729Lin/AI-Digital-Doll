@@ -51,6 +51,15 @@ REGION_TARGETS = [
     r"armslegs/(upperlegs|lowerlegs)-height-.*",
     r"measure/measure-.*",
     r"bodyshapes/bodyshapes-.*",
+    r"head/head-.*",
+    r"forehead/forehead-.*",
+    r"eyebrows/eyebrows-.*",
+    r"eyes/[lr]-eye-.*",
+    r"nose/nose-.*",
+    r"mouth/mouth-.*",
+    r"ears/[lr]-ear-.*",
+    r"chin/chin-.*",
+    r"cheek/[lr]-cheek-.*",
     # Always applied (not a slider): smooths the chest under the fitted top.
     r"breast/nipple-point-decr",
 ]

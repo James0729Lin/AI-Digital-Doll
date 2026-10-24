@@ -5,12 +5,10 @@ using DigitalDoll.Body;
 using DigitalDoll.Character;
 using DigitalDoll.Core;
 using DigitalDoll.Core.Body;
-using DigitalDoll.Core.Geometry;
 using DigitalDoll.Core.Mascot;
 using DigitalDoll.Creator;
 using DigitalDoll.Platform;
 using Godot;
-using NVector2 = System.Numerics.Vector2;
 
 namespace DigitalDoll.Mascot;
 
@@ -25,6 +23,8 @@ public partial class MascotRoot : Node3D
     private const string SavedCharacter = "user://characters/current.vrm";
     private const float CharacterHeightPoints = 300f;
     private const float FacingTurn = 1.1f;
+    private const float HitMargin = 5f;
+    private const float HitSlack = 6f;
 
     private const int MenuCallOver = 0;
     private const int MenuLoad = 1;
@@ -43,6 +43,7 @@ public partial class MascotRoot : Node3D
     private Node3D? _model;
     private HumanoidRig? _rig;
     private ProceduralAnimator? _animator;
+    private CharacterHitShape? _hitShape;
 
     private Vector2I _windowSize;
     private float _pixelsPerMetre = 180f;
@@ -281,6 +282,8 @@ public partial class MascotRoot : Node3D
         _model?.QueueFree();
         _model = model;
         _rig = rig;
+        _hitShape = CharacterHitShape.Measure(model, rig.Skeleton);
+        _region = Array.Empty<Vector2>();
         var expressions = ExpressionRig.Create(model);
         _animator = new ProceduralAnimator(rig, expressions, _random);
         GD.Print($"Loaded {label}: expressions [{string.Join(", ", expressions.Names)}]");
@@ -364,41 +367,17 @@ public partial class MascotRoot : Node3D
 
     private void UpdateHitRegion()
     {
-        if (_dragging)
+        if (_dragging || _hitShape == null)
             return;
 
-        var points = CharacterOutline();
-        float margin = _heightPixels * 0.1f + 6f;
-        var tight = HitRegion.Build(points, margin, ToNumerics(_windowSize));
-        var current = _region.Select(ToNumerics).ToArray();
-        if (current.Length >= 3 && HitRegion.ContainsAll(current, tight))
+        var tight = _hitShape.Outline(_camera, HitMargin);
+        if (_region.Length >= 3 && Array.TrueForAll(tight, p => Geometry2D.IsPointInPolygon(p, _region)))
             return;
 
-        // Grow the region with some slack so a walking character does not need a new
-        // window region every frame.
-        float slack = _brain!.State == MascotState.Falling ? 0f : _heightPixels * 0.12f;
-        var region = HitRegion.Build(points, margin + slack, ToNumerics(_windowSize));
-        SetMousePassthrough(region.Select(p => new Vector2(p.X, p.Y)).ToArray());
-    }
-
-    private List<NVector2> CharacterOutline()
-    {
-        var rig = _rig!;
-        var points = new List<NVector2>();
-        foreach (var p in rig.BoneGlobalPositions())
-            points.Add(ToNumerics(_camera.UnprojectPosition(p)));
-
-        // Bones stop inside the head; add the crown and the hair around it.
-        var head = rig.BoneGlobalPosition("Head");
-        float crown = _pivot.GlobalPosition.Y + _modelHeight - head.Y;
-        var headScreen = _camera.UnprojectPosition(head);
-        float radius = crown * _pixelsPerMetre * 0.6f;
-        float topY = headScreen.Y - crown * _pixelsPerMetre;
-        points.Add(new NVector2(headScreen.X - radius, topY));
-        points.Add(new NVector2(headScreen.X + radius, topY));
-        points.Add(new NVector2(headScreen.X - radius, headScreen.Y));
-        points.Add(new NVector2(headScreen.X + radius, headScreen.Y));
-        return points;
+        // A little slack so a breathing or walking character does not need a new
+        // window region (an expensive call on Windows) every frame.
+        float slack = _brain!.State == MascotState.Falling ? 0f : HitSlack;
+        SetMousePassthrough(_hitShape.Outline(_camera, HitMargin + slack));
     }
 
     private void SetMousePassthrough(Vector2[] region)
@@ -470,8 +449,8 @@ public partial class MascotRoot : Node3D
             _brain?.WalkTo(_windowSize.X * 0.5f);
     }
 
-    internal Image CaptureFrame() => GetViewport().GetTexture().GetImage();
+    /// <summary>The current mouse region outline (for snapshots).</summary>
+    internal Vector2[] HitOutline() => _hitShape?.Outline(_camera, HitMargin) ?? Array.Empty<Vector2>();
 
-    private static NVector2 ToNumerics(Vector2 v) => new(v.X, v.Y);
-    private static NVector2 ToNumerics(Vector2I v) => new(v.X, v.Y);
+    internal Image CaptureFrame() => GetViewport().GetTexture().GetImage();
 }

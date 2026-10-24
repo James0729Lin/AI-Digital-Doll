@@ -104,6 +104,8 @@ internal sealed class Snapshot
         {
             RenderingServer.FramePostDraw -= capture;
             var error = root.CaptureFrame().SavePng(_output);
+            var outline = root.HitOutline();
+            GD.Print("hit outline: " + string.Join(" ", Array.ConvertAll(outline, p => $"{p.X:F0},{p.Y:F0}")));
             GD.Print($"snapshot {_pose} t={_time} -> {_output} ({error})");
             root.GetTree().Quit();
         };

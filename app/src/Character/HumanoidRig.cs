@@ -126,14 +126,6 @@ public sealed class HumanoidRig
         }
     }
 
-    /// <summary>Current global positions of the animated bones, for hit testing.</summary>
-    public IEnumerable<Vector3> BoneGlobalPositions()
-    {
-        var toWorld = Skeleton.GlobalTransform;
-        foreach (var index in _bones.Values)
-            yield return toWorld * Skeleton.GetBoneGlobalPose(index).Origin;
-    }
-
     public Vector3 BoneGlobalPosition(string bone) =>
         _bones.TryGetValue(bone, out int index)
             ? Skeleton.GlobalTransform * Skeleton.GetBoneGlobalPose(index).Origin

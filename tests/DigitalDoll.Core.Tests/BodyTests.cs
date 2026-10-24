@@ -162,7 +162,8 @@ public class BodyTests : IClassFixture<BodyPackFixture>
             float maxMove = 0f;
             for (int i = 0; i < moved.Length; i++)
                 maxMove = Math.Max(maxMove, Math.Abs(moved[i] - baseline[i]));
-            Assert.True(maxMove > 0.002f, $"{def.Id} moved the body only {maxMove * 1000:F2} mm");
+            // Facial targets are subtle (an eye corner moves ~2 mm), so 1 mm is the bar.
+            Assert.True(maxMove > 0.001f, $"{def.Id} moved the body only {maxMove * 1000:F2} mm");
         }
     }
 
