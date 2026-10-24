@@ -17,3 +17,6 @@ msgstr "Quit"
 
 msgid "DIALOG_OPEN_CHARACTER"
 msgstr "Choose a VRM character file"
+
+msgid "MENU_BODY_EDITOR"
+msgstr "Body editor…"

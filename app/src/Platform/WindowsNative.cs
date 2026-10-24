@@ -12,11 +12,17 @@ public static class WindowsNative
     private const long WsExAppWindow = 0x00040000;
     private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
+    private const int SwShow = 5;
 
     public static bool IsWindows => OperatingSystem.IsWindows();
 
     /// <summary>Removes the window from the taskbar and Alt+Tab (the tray icon replaces it).</summary>
-    public static void HideFromTaskbar(long hwnd)
+    public static void HideFromTaskbar(long hwnd) => SetTaskbarStyle(hwnd, visible: false);
+
+    /// <summary>Restores a normal taskbar button (used by the editor window).</summary>
+    public static void ShowInTaskbar(long hwnd) => SetTaskbarStyle(hwnd, visible: true);
+
+    private static void SetTaskbarStyle(long hwnd, bool visible)
     {
         if (!IsWindows || hwnd == 0)
             return;
@@ -24,15 +30,19 @@ public static class WindowsNative
         {
             var handle = new IntPtr(hwnd);
             long style = GetWindowLongPtrW(handle, GwlExStyle).ToInt64();
-            style = (style | WsExToolWindow) & ~WsExAppWindow;
+            long updated = visible
+                ? (style & ~WsExToolWindow) | WsExAppWindow
+                : (style | WsExToolWindow) & ~WsExAppWindow;
+            if (updated == style)
+                return;
             // The taskbar only notices the new style after the window is re-shown.
             ShowWindow(handle, SwHide);
-            SetWindowLongPtrW(handle, GwlExStyle, new IntPtr(style));
-            ShowWindow(handle, SwShowNoActivate);
+            SetWindowLongPtrW(handle, GwlExStyle, new IntPtr(updated));
+            ShowWindow(handle, visible ? SwShow : SwShowNoActivate);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
-            GD.PushWarning($"Could not hide the window from the taskbar: {e.Message}");
+            GD.PushWarning($"Could not change the taskbar style: {e.Message}");
         }
     }
 

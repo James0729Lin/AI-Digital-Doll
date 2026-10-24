@@ -80,6 +80,14 @@ jobs:
               --snapshot "$PWD/build/snapshots/$pose.png" --pose "$pose" --time 1.0
             python3 tools/check_snapshot.py "build/snapshots/$pose.png"
           done
+          timeout 180 xvfb-run -a -s "-screen 0 1600x1000x24" \
+            build/linux/AIDigitalDoll.x86_64 --rendering-driver opengl3 -- \
+            --creator --snapshot "$PWD/build/snapshots/editor.png" --set breast-size=0.8 --view quarter
+          python3 tools/check_snapshot.py build/snapshots/editor.png editor
+          # desktop -> body editor -> desktop, exits non-zero on failure
+          timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" \
+            build/linux/AIDigitalDoll.x86_64 --rendering-driver opengl3 -- --selftest | tee build/selftest.log
+          grep -q "selftest: OK" build/selftest.log
 
       - name: Package
         run: |

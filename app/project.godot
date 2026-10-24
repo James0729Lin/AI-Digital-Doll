@@ -44,6 +44,10 @@ project/solution_directory=".."
 
 enabled=PackedStringArray("res://addons/Godot-MToon-Shader/plugin.cfg", "res://addons/vrm/plugin.cfg")
 
+[gui]
+
+theme/custom_font="res://assets/fonts/NotoSansTC-Regular.ttf"
+
 [internationalization]
 
 locale/translations=PackedStringArray("res://locale/zh_TW.po", "res://locale/en.po")

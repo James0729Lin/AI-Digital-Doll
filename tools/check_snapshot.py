@@ -45,8 +45,24 @@ def read_rgba(path):
     return width, height, rows
 
 
-def main(path):
+def check_editor(path, width, height, rows):
+    """The editor window is opaque; check that a body was drawn in the 3D view."""
+    background = rows[5][5 * 4:5 * 4 + 3]
+    view_width = width * 2 // 3
+    differing = sum(
+        1 for y in range(0, height, 4) for x in range(0, view_width, 4)
+        if sum(abs(rows[y][x * 4 + c] - background[c]) for c in range(3)) > 60)
+    coverage = differing / ((height // 4) * (view_width // 4))
+    print(f"{path}: {width}x{height}, body covers {coverage:.1%} of the 3D view")
+    if not 0.05 < coverage < 0.8:
+        sys.exit("body not visible in the editor snapshot")
+
+
+def main(path, mode="mascot"):
     width, height, rows = read_rgba(path)
+    if mode == "editor":
+        check_editor(path, width, height, rows)
+        return
     opaque = sum(1 for row in rows for x in range(3, len(row), 4) if row[x] > 200)
     coverage = opaque / (width * height)
     corner_alpha = rows[0][3]
@@ -58,4 +74,4 @@ def main(path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    main(*sys.argv[1:3])

@@ -17,3 +17,6 @@ msgstr "結束"
 
 msgid "DIALOG_OPEN_CHARACTER"
 msgstr "選擇 VRM 角色檔"
+
+msgid "MENU_BODY_EDITOR"
+msgstr "捏身材…"

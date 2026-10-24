@@ -13,10 +13,14 @@
 **M0 技術驗證**（進行中）：透明桌面視窗、滑鼠穿透、執行期載入 VRM 角色、程序化待機/走路/拖曳/掉落動作、系統匣選單。
 測試方式見 [M0 Windows 測試說明](docs/TESTING-M0.md)。
 
+**捏身材原型**（已完成）：MakeHuman CC0 素材、575 種變形、胸／腰／臀／屁股／手臂／腿等 100 多個滑桿（簡易／進階、左右對稱）、素體＋貼身內衣、即時預覽、存檔、復原／重做。
+測試方式見 [捏身材測試說明](docs/TESTING-BODY.md)。
+
 ## 文件
 
 - [系統規格書](docs/SPEC.md)
 - [M0 Windows 測試說明](docs/TESTING-M0.md)
+- [捏身材測試說明](docs/TESTING-BODY.md)
 
 ## 專案結構
 
@@ -25,6 +29,8 @@ app/                    Godot 4.7 (.NET) 專案
   addons/               godot-vrm、MToon Shader（MIT，第三方）
   assets/               內建角色與圖示
   scenes/               場景
+  src/Body/             素體網格顯示
+  src/Creator/          捏身材畫面
   src/Character/        VRM 載入、骨架姿勢、表情、程序化動畫
   src/Mascot/           桌面模式主程式
   src/Platform/         Win32 呼叫
@@ -32,6 +38,7 @@ app/                    Godot 4.7 (.NET) 專案
 src/DigitalDoll.Core/   不依賴 Godot 的核心邏輯（可單元測試）
 tests/                  單元測試
 tools/                  建置與檢查工具
+  makehuman/convert.py  MakeHuman CC0 素材轉檔
 ```
 
 ## 開發
@@ -45,6 +52,8 @@ godot --path app                               # 執行
 
 # 開發用：算出某個姿勢的截圖後結束
 godot --path app -- --snapshot out.png --pose walk --time 1.2 --yaw 1.57
+godot --path app -- --creator --snapshot out.png --view side --set breast-size=1 --tab chest
+godot --path app -- --selftest                 # 桌面 → 捏身材 → 桌面 自動切換測試
 ```
 
 每次推送，GitHub Actions 都會執行單元測試、匯出 Windows 版，並用打包後的程式算圖做冒煙測試；Windows 版可在 Actions 的 Artifacts 下載。

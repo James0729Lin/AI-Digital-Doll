@@ -26,6 +26,7 @@ public partial class MascotRoot : Node3D
     private const int MenuLoad = 1;
     private const int MenuReset = 2;
     private const int MenuQuit = 3;
+    private const int MenuCreator = 4;
 
     private Camera3D _camera = null!;
     private Node3D _pivot = null!;
@@ -53,6 +54,9 @@ public partial class MascotRoot : Node3D
 
     private Snapshot? _snapshot;
 
+    // The --creator argument opens the editor once at start-up, not on every return.
+    private static bool _creatorRequested;
+
     public override void _Ready()
     {
         _camera = GetNode<Camera3D>("Camera");
@@ -60,11 +64,24 @@ public partial class MascotRoot : Node3D
         _menu = GetNode<PopupMenu>("TrayMenu");
         _fileDialog = GetNode<FileDialog>("OpenCharacterDialog");
 
-        _snapshot = Snapshot.FromCommandLine(OS.GetCmdlineUserArgs());
+        var args = OS.GetCmdlineUserArgs();
+        if (Array.IndexOf(args, "--creator") >= 0 && !_creatorRequested)
+        {
+            _creatorRequested = true;
+            AppWindow.OpenCreator(this);
+            return;
+        }
+
+        _snapshot = Snapshot.FromCommandLine(args);
         if (_snapshot != null)
+        {
             ConfigureSnapshotWindow(_snapshot);
+        }
         else
+        {
+            AppWindow.UseDesktopMode(GetWindow());
             ConfigureDesktopWindow();
+        }
 
         BuildMenu();
         GetNode<StatusIndicator>("Tray").Pressed += OnTrayPressed;
@@ -82,6 +99,7 @@ public partial class MascotRoot : Node3D
             LoadCharacter(DefaultCharacter, persist: false);
 
         _snapshot?.Begin(_brain!, _windowSize);
+        SelfTest.OnSceneReady(this, "desktop");
     }
 
     public override void _Process(double delta)
@@ -353,6 +371,8 @@ public partial class MascotRoot : Node3D
     private void BuildMenu()
     {
         _menu.Clear();
+        _menu.AddItem(Tr("MENU_BODY_EDITOR"), MenuCreator);
+        _menu.AddSeparator();
         _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
         _menu.AddItem(Tr("MENU_LOAD_CHARACTER"), MenuLoad);
         _menu.AddItem(Tr("MENU_DEFAULT_CHARACTER"), MenuReset);
@@ -386,6 +406,9 @@ public partial class MascotRoot : Node3D
                 break;
             case MenuQuit:
                 GetTree().Quit();
+                break;
+            case MenuCreator:
+                AppWindow.OpenCreator(this);
                 break;
         }
     }
