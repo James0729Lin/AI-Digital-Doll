@@ -85,6 +85,30 @@ public class MascotBrainTests
         Assert.True(onWindow, "never stood on the window");
     }
 
+    [Theory]
+    [InlineData(900f)]   // floating window: jump up to its side first
+    [InlineData(1100f)]  // window reaching below the floor: climb straight up
+    public void ClimbsAWindowSideAndPullsUpOntoIt(float bottom)
+    {
+        bool done = false;
+        foreach (int seed in Enumerable.Range(1, 30))
+        {
+            var brain = Create(seed, surroundings: WithWindow(500, 400, 1400, bottom));
+            bool climbedWindow = false;
+            for (int i = 0; i < 60 * 600 && !done; i++)
+            {
+                brain.Update(1f / 60f);
+                if (brain.State == MascotState.Climb && brain.WallId is long w && w / 16 == 7)
+                    climbedWindow = true;
+                if (climbedWindow && brain.State == MascotState.Landing && brain.PlatformId == 7 * 16)
+                    done = true;
+            }
+            if (done)
+                break;
+        }
+        Assert.True(done, "never climbed a window side onto its top");
+    }
+
     [Fact]
     public void WalkToFacesTheTargetAndArrives()
     {
@@ -189,8 +213,32 @@ public class MascotBrainTests
 
         brain.SetSurroundings(Screen());
         Assert.Equal(MascotState.Falling, brain.State);
-        Run(brain, 2f);
+        bool tumbled = false;
+        for (int i = 0; i < 120; i++)
+        {
+            brain.Update(1f / 60f);
+            tumbled |= brain.State == MascotState.Tumble;
+        }
         Assert.True(brain.OnFloor);
+        Assert.True(tumbled, "a long fall should end in a tumble");
+        Run(brain, 3f);
+        Assert.NotEqual(MascotState.Tumble, brain.State);
+    }
+
+    [Fact]
+    public void ShortDropsLandOnTheFeet()
+    {
+        var brain = Create();
+        brain.BeginDrag();
+        brain.DragTo(800f, Height - 60f);
+        brain.EndDrag(0f, 0f);
+        bool tumbled = false;
+        for (int i = 0; i < 60; i++)
+        {
+            brain.Update(1f / 60f);
+            tumbled |= brain.State == MascotState.Tumble;
+        }
+        Assert.False(tumbled);
     }
 
     [Fact]
@@ -259,8 +307,8 @@ public class SurroundingsTests
         Assert.Single(s.Platforms);
         Assert.Equal(1039f, s.Floor.Y);
         Assert.Equal(2, s.Walls.Count);
-        Assert.Equal(-1, s.FindWall(-1)!.Value.Side);
-        Assert.Equal(1920f, s.FindWall(1)!.Value.X);
+        Assert.Equal(-1, s.FindWall(Surroundings.LeftWallId)!.Value.Side);
+        Assert.Equal(1920f, s.FindWall(Surroundings.RightWallId)!.Value.X);
     }
 
     [Fact]
@@ -276,6 +324,34 @@ public class SurroundingsTests
         Assert.Equal((400f, 600f), (pieces[0].X0, pieces[0].X1));
         Assert.Equal((900f, 1400f), (pieces[1].X0, pieces[1].X1));
         Assert.Contains(s.Platforms, p => p.Id / 16 == 1 && p.Y == 350f);
+    }
+
+    [Fact]
+    public void WindowSidesAreClimbableUpToTheirTop()
+    {
+        var s = Surroundings.FromWindows(1920f, 1040f, 300f, new[] { new DesktopWindow(5, 400, 500, 1400, 900) });
+        var left = s.Walls.Single(w => w.Id / 16 == 5 && w.X == 400f);
+        var right = s.Walls.Single(w => w.Id / 16 == 5 && w.X == 1400f);
+        Assert.Equal((1, 500f, 900f), (left.Side, left.Top, left.Bottom));
+        Assert.Equal(-1, right.Side);
+        Assert.Equal(5 * 16, left.TopPlatform);
+        Assert.Equal(5 * 16, right.TopPlatform);
+    }
+
+    [Fact]
+    public void CoveredPartsOfAWindowSideAreNotClimbable()
+    {
+        var s = Surroundings.FromWindows(1920f, 1040f, 300f, new[]
+        {
+            new DesktopWindow(1, 300, 600, 700, 750), // covers the middle of the next window's left side
+            new DesktopWindow(2, 500, 400, 1400, 1000),
+        });
+        var pieces = s.Walls.Where(w => w.Id / 16 == 2 && w.X == 500f).OrderBy(w => w.Top).ToList();
+        Assert.Equal(2, pieces.Count);
+        Assert.Equal((400f, 600f), (pieces[0].Top, pieces[0].Bottom));
+        Assert.Equal((750f, 1000f), (pieces[1].Top, pieces[1].Bottom));
+        Assert.NotNull(pieces[0].TopPlatform);
+        Assert.Null(pieces[1].TopPlatform);
     }
 
     [Fact]

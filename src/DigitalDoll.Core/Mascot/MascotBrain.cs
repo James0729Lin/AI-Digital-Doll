@@ -14,6 +14,9 @@ public enum MascotState
     Dragged,
     Falling,
     Landing,
+
+    /// <summary>A hard landing after a long fall: on its bottom for a moment, then up again.</summary>
+    Tumble,
 }
 
 public sealed class MascotTuning
@@ -28,6 +31,7 @@ public sealed class MascotTuning
     public float MaxWalkDistance { get; init; } = 600f;
     public float EdgeMargin { get; init; } = 60f;
     public float LandingSeconds { get; init; } = 0.45f;
+    public float TumbleSeconds { get; init; } = 2.2f;
     public float ArriveTolerance { get; init; } = 2f;
 
     /// <summary>Character height in pixels; reach, jump range and wall offset scale with it.</summary>
@@ -56,6 +60,8 @@ public sealed class MascotBrain
         Jump,
         StepOff,
         Sit,
+        JumpToWall,
+        ClimbDown,
     }
 
     private readonly MascotTuning _tuning;
@@ -68,6 +74,9 @@ public sealed class MascotBrain
     private Platform _jumpTarget;
     private float _jumpTargetX;
 
+    private Wall? _jumpWall;
+    private float _fallStartY;
+    private long? _wallId;
     private float _jumpTime, _jumpDuration;
     private float _jumpStartX, _jumpStartY;
 
@@ -98,8 +107,11 @@ public sealed class MascotBrain
     /// <summary>The platform under the feet, or null while climbing or in the air.</summary>
     public long? PlatformId { get; private set; }
 
-    /// <summary>-1 / +1 while on the left / right screen edge, 0 otherwise.</summary>
+    /// <summary>While climbing: the direction of the wall (-1 left, +1 right); 0 otherwise.</summary>
     public int WallSide { get; private set; }
+
+    /// <summary>The wall being climbed (a screen edge or a window side), if any.</summary>
+    public long? WallId => _wallId;
 
     public float TargetX { get; private set; }
     public float TargetY { get; private set; }
@@ -143,9 +155,9 @@ public sealed class MascotBrain
             if (State == MascotState.Walk)
                 TargetX = Math.Clamp(TargetX, platform.X0, platform.X1);
         }
-        else if (WallSide != 0)
+        else if (_wallId is long wallId)
         {
-            if (next.FindWall(WallSide) is Wall wall)
+            if (next.FindWall(wallId) is Wall wall)
             {
                 X = wall.X - wall.Side * _tuning.WallOffset;
                 Y = Math.Clamp(Y, wall.Top, wall.Bottom);
@@ -154,10 +166,11 @@ public sealed class MascotBrain
             else
             {
                 StartFalling(0f, 0f);
+                return;
             }
         }
 
-        if (State == MascotState.Jump && next.FindPlatform(_jumpTarget.Id) is null)
+        if (State == MascotState.Jump && (_jumpWall is Wall jw ? next.FindWall(jw.Id) is null : next.FindPlatform(_jumpTarget.Id) is null))
             StartFalling(VelocityX, VelocityY);
         X = Math.Clamp(X, 0f, next.Width);
     }
@@ -198,6 +211,10 @@ public sealed class MascotBrain
                 if (_stateTime >= _tuning.LandingSeconds)
                     EnterIdle();
                 break;
+            case MascotState.Tumble:
+                if (_stateTime >= _tuning.TumbleSeconds)
+                    EnterIdle(shortWait: true);
+                break;
             case MascotState.Dragged:
                 break;
         }
@@ -217,14 +234,14 @@ public sealed class MascotBrain
     /// <summary>Climbs to <paramref name="y"/> on the wall the mascot is holding on to.</summary>
     public void ClimbTo(float y)
     {
-        if (WallSide != 0 && Surroundings.FindWall(WallSide) is Wall wall && State is MascotState.Cling or MascotState.Climb)
+        if (_wallId is long id && Surroundings.FindWall(id) is Wall wall && State is MascotState.Cling or MascotState.Climb)
             StartClimb(wall, y);
     }
 
     /// <summary>Sits down where the mascot stands.</summary>
     public void SitDown()
     {
-        if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing))
+        if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing or MascotState.Tumble))
             return;
         _plan = Plan.Sit;
         Arrive();
@@ -237,7 +254,7 @@ public sealed class MascotBrain
         X = Math.Clamp(x, floor.X0, floor.X1);
         Y = floor.Y;
         PlatformId = Surroundings.FloorId;
-        WallSide = 0;
+        LeaveWall();
         if (State != MascotState.Walk)
             EnterIdle();
     }
@@ -247,7 +264,7 @@ public sealed class MascotBrain
         VelocityX = 0f;
         VelocityY = 0f;
         PlatformId = null;
-        WallSide = 0;
+        LeaveWall();
         _plan = Plan.None;
         SetState(MascotState.Dragged);
     }
@@ -268,7 +285,7 @@ public sealed class MascotBrain
         foreach (var wall in Surroundings.Walls)
         {
             float gap = MathF.Abs(X - (wall.X - wall.Side * _tuning.WallOffset));
-            if (gap < _tuning.GrabDistance && Y > wall.Top && Y < wall.Bottom - _tuning.Height * 0.1f)
+            if (gap < _tuning.GrabDistance && Y > wall.Top && Y < wall.Bottom - 1f)
             {
                 StartCling(wall, Y);
                 return;
@@ -300,16 +317,35 @@ public sealed class MascotBrain
 
         foreach (var wall in Surroundings.Walls)
         {
-            float end = wall.Side < 0 ? here.X0 : here.X1;
-            bool touches = MathF.Abs(end - wall.X) < _tuning.Height * 0.15f && here.Y > wall.Top && here.Y <= wall.Bottom + 1f;
-            if (touches)
+            var w = wall;
+            float stand = w.X - w.Side * _tuning.WallOffset;
+            if (MathF.Abs(w.Top - here.Y) < 1f && w.TopPlatform == here.Id)
             {
-                var w = wall;
-                options.Add((1.3f, () =>
+                // Down the side of the window we are standing on.
+                float edge = Math.Clamp(w.X, here.X0 + 1f, here.X1 - 1f);
+                options.Add((0.9f, () => { _plan = Plan.ClimbDown; _planWall = w; EnterWalk(edge); }));
+                continue;
+            }
+            if (!here.Spans(stand) || w.Top > here.Y - _tuning.Height * 0.3f)
+                continue;
+            if (w.Bottom >= here.Y - 2f)
+            {
+                // The wall reaches down to our feet: walk over and climb.
+                options.Add((w.TopPlatform != null ? 2f : 1.2f, () =>
                 {
                     _plan = Plan.Climb;
                     _planWall = w;
-                    EnterWalk(w.X - w.Side * _tuning.WallOffset);
+                    EnterWalk(stand);
+                }));
+            }
+            else if (here.Y - w.Bottom <= _tuning.JumpUp * 0.8f)
+            {
+                // The window floats above us: jump up and grab its side.
+                options.Add((w.TopPlatform != null ? 1.6f : 0.8f, () =>
+                {
+                    _plan = Plan.JumpToWall;
+                    _planWall = w;
+                    EnterWalk(stand);
                 }));
             }
         }
@@ -342,22 +378,26 @@ public sealed class MascotBrain
 
     private void DecideOnWall()
     {
-        if (Surroundings.FindWall(WallSide) is not Wall wall)
+        if (_wallId is not long id || Surroundings.FindWall(id) is not Wall wall)
         {
             StartFalling(0f, 0f);
             return;
         }
 
+        var floor = Surroundings.Floor;
         var options = new List<(float Weight, Action Act)>
         {
-            (2.5f, () => StartClimb(wall, PickWallTarget(wall))),
-            (1f, () => StartClimb(wall, Surroundings.Floor.Y)),
-            (0.6f, () => StartFalling(-wall.Side * 120f, 0f)),
+            (1.5f, () => StartClimb(wall, PickWallTarget(wall))),
+            (0.5f, () => StartFalling(-wall.Side * 120f, 0f)),
         };
+        if (wall.TopPlatform is long top && Surroundings.FindPlatform(top) is not null)
+            options.Add((2.5f, () => StartClimb(wall, wall.Top)));
+        if (wall.Bottom >= floor.Y - 1f)
+            options.Add((1f, () => StartClimb(wall, floor.Y)));
         var jumps = ReachablePlatforms(null, X);
         if (jumps.Count > 0)
         {
-            options.Add((1.5f, () =>
+            options.Add((1.2f, () =>
             {
                 var (target, _, landing) = jumps[_random.Next(jumps.Count)];
                 StartJump(target, landing);
@@ -433,7 +473,9 @@ public sealed class MascotBrain
         switch (plan)
         {
             case Plan.Climb:
-                StartClimb(_planWall, PickWallTarget(_planWall));
+                // Window sides are mostly climbed to get on top of the window.
+                bool toTop = _planWall.TopPlatform != null && _random.NextDouble() < 0.7;
+                StartClimb(_planWall, toTop ? _planWall.Top : PickWallTarget(_planWall));
                 break;
             case Plan.Jump:
                 StartJump(_jumpTarget, _jumpTargetX);
@@ -446,6 +488,12 @@ public sealed class MascotBrain
             case Plan.StepOff:
                 StartFalling(Facing * _tuning.WalkSpeed * 0.6f, 0f);
                 break;
+            case Plan.JumpToWall:
+                StartJumpToWall(_planWall);
+                break;
+            case Plan.ClimbDown:
+                StartClimb(_planWall, PickWallTarget(_planWall, below: _planWall.Top + _tuning.Height * 0.3f));
+                break;
             default:
                 EnterIdle();
                 break;
@@ -455,6 +503,7 @@ public sealed class MascotBrain
     private void StartClimb(Wall wall, float targetY)
     {
         PlatformId = null;
+        _wallId = wall.Id;
         WallSide = wall.Side;
         Facing = wall.Side;
         X = wall.X - wall.Side * _tuning.WallOffset;
@@ -466,6 +515,7 @@ public sealed class MascotBrain
     private void StartCling(Wall wall, float y)
     {
         PlatformId = null;
+        _wallId = wall.Id;
         WallSide = wall.Side;
         Facing = wall.Side;
         X = wall.X - wall.Side * _tuning.WallOffset;
@@ -488,14 +538,25 @@ public sealed class MascotBrain
             if (MathF.Abs(Y - floor.Y) < 1f)
             {
                 // Back down on the floor.
-                WallSide = 0;
+                LeaveWall();
                 PlatformId = Surroundings.FloorId;
                 X = Math.Clamp(X, floor.X0, floor.X1);
                 EnterIdle(shortWait: true);
                 return;
             }
-            if (Surroundings.FindWall(WallSide) is Wall wall)
+            if (_wallId is long id && Surroundings.FindWall(id) is Wall wall)
+            {
+                // At the top edge of a window: pull up onto it.
+                if (MathF.Abs(Y - wall.Top) < 1f && wall.TopPlatform is long top && Surroundings.FindPlatform(top) is Platform platform)
+                {
+                    LeaveWall();
+                    X = Math.Clamp(wall.X + wall.Side * _tuning.Height * 0.15f, platform.X0, platform.X1);
+                    Y = platform.Y;
+                    Land(platform);
+                    return;
+                }
                 StartCling(wall, Y);
+            }
             return;
         }
         VelocityY = MathF.Sign(delta) * _tuning.ClimbSpeed;
@@ -515,9 +576,18 @@ public sealed class MascotBrain
         if (MathF.Abs(dx) > 1f)
             Facing = dx > 0 ? 1 : -1;
         _jumpTime = 0f;
+        _jumpWall = null;
         PlatformId = null;
-        WallSide = 0;
+        LeaveWall();
         SetState(MascotState.Jump);
+    }
+
+    private void StartJumpToWall(Wall wall)
+    {
+        // Aim a little above the bottom of the side so the hands find something to hold.
+        float y = MathF.Max(wall.Top, wall.Bottom - _tuning.Height * 0.15f);
+        StartJump(new Platform(-99, X, X, y), X);
+        _jumpWall = wall;
     }
 
     private void UpdateJump(float dt)
@@ -527,6 +597,12 @@ public sealed class MascotBrain
         {
             X = _jumpTargetX;
             Y = _jumpTarget.Y;
+            if (_jumpWall is Wall wall)
+            {
+                _jumpWall = null;
+                StartCling(wall, Y);
+                return;
+            }
             Land(_jumpTarget);
             return;
         }
@@ -537,10 +613,12 @@ public sealed class MascotBrain
     private void StartFalling(float velocityX, float velocityY)
     {
         PlatformId = null;
-        WallSide = 0;
+        LeaveWall();
+        _jumpWall = null;
         _plan = Plan.None;
         VelocityX = velocityX;
         VelocityY = velocityY;
+        _fallStartY = Y;
         SetState(MascotState.Falling);
     }
 
@@ -589,12 +667,13 @@ public sealed class MascotBrain
 
     private void Land(Platform platform)
     {
+        bool hard = State == MascotState.Falling && Y - _fallStartY > _tuning.Height * 0.9f;
         PlatformId = platform.Id;
-        WallSide = 0;
+        LeaveWall();
         X = Math.Clamp(X, platform.X0, platform.X1);
         VelocityX = 0f;
         VelocityY = 0f;
-        SetState(MascotState.Landing);
+        SetState(hard ? MascotState.Tumble : MascotState.Landing);
     }
 
     private void EnterIdle(bool shortWait = false)
@@ -640,8 +719,18 @@ public sealed class MascotBrain
         return Math.Clamp(X + direction * distance, min, max);
     }
 
-    private float PickWallTarget(Wall wall) =>
-        Lerp(wall.Top, wall.Bottom - _tuning.Height * 0.2f, (float)_random.NextDouble());
+    private float PickWallTarget(Wall wall, float? below = null)
+    {
+        float top = below ?? wall.Top;
+        float bottom = MathF.Max(top, wall.Bottom - _tuning.Height * 0.2f);
+        return Lerp(top, bottom, (float)_random.NextDouble());
+    }
+
+    private void LeaveWall()
+    {
+        _wallId = null;
+        WallSide = 0;
+    }
 
     private float ClampOn(Platform platform, float x)
     {

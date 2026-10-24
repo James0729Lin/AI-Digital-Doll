@@ -22,7 +22,8 @@ public sealed class ProceduralAnimator
 
     private float _time;
     private float _walkPhase;
-    private float _idle = 1f, _walk, _drag, _fall, _land, _climb, _sit, _jump;
+    private float _idle = 1f, _walk, _drag, _fall, _land, _climb, _sit, _jump, _tumble;
+    private float _tumbleTime;
     private float _climbPhase;
     private float _dangle, _dangleVelocity;
     private float _lookYaw, _lookPitch;
@@ -47,6 +48,9 @@ public sealed class ProceduralAnimator
         Ease(ref _climb, state is MascotState.Climb or MascotState.Cling ? 1f : 0f, dt);
         Ease(ref _sit, state == MascotState.Sit ? 1f : 0f, dt, 6f);
         Ease(ref _jump, state == MascotState.Jump ? 1f : 0f, dt, 14f);
+        // Thrown down hard, then a slower climb back up.
+        Ease(ref _tumble, state == MascotState.Tumble ? 1f : 0f, dt, state == MascotState.Tumble ? 18f : 4f);
+        _tumbleTime = state == MascotState.Tumble ? _tumbleTime + dt : 0f;
         // Hand over hand: one full cycle per ~0.55 character-heights climbed.
         _climbPhase = (_climbPhase + dt * Mathf.Tau * MathF.Abs(climbSpeedMetres) / (0.55f * _rig.Height)) % Mathf.Tau;
         Ease(ref _idle, state == MascotState.Idle ? 1f : 0f, dt);
@@ -76,6 +80,7 @@ public sealed class ProceduralAnimator
         PoseClimb();
         PoseSit();
         PoseJump();
+        PoseTumble();
         PoseHead();
         _rig.Commit();
 
@@ -266,6 +271,32 @@ public sealed class ProceduralAnimator
         _rig.Rotate("RightUpperArm", left, -0.2f * w);
     }
 
+    private void PoseTumble()
+    {
+        float w = _tumble;
+        if (w <= 0.001f)
+            return;
+        var left = _rig.Left;
+        // On its bottom with the legs out in front, leaning back on the hands; a
+        // little bounce on impact, then shaking the head as if dazed.
+        float bounce = MathF.Exp(-_tumbleTime * 9f) * MathF.Sin(_tumbleTime * 30f);
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * (0.88f - 0.06f * bounce) * w));
+        _rig.Rotate("LeftUpperLeg", left, -1.25f * w);
+        _rig.Rotate("RightUpperLeg", left, -1.1f * w);
+        _rig.Rotate("LeftLowerLeg", left, 0.25f * w);
+        _rig.Rotate("RightLowerLeg", left, 0.55f * w);
+        _rig.Rotate("LeftUpperLeg", _rig.Forward, -0.2f * w);
+        _rig.Rotate("RightUpperLeg", _rig.Forward, 0.2f * w);
+        _rig.Rotate("Spine", left, (-0.3f + 0.15f * bounce) * w);
+        _rig.Rotate("LeftUpperArm", left, 0.55f * w);
+        _rig.Rotate("RightUpperArm", left, 0.55f * w);
+        _rig.Rotate("LeftUpperArm", _rig.Forward, -0.25f * w);
+        _rig.Rotate("RightUpperArm", _rig.Forward, 0.25f * w);
+        float daze = MathF.Sin(_tumbleTime * 9f) * MathF.Exp(-_tumbleTime * 1.2f);
+        _rig.Rotate("Head", _rig.Up, 0.35f * daze * w);
+        _rig.Rotate("Head", _rig.Forward, 0.12f * daze * w);
+    }
+
     private void PoseHead()
     {
         float w = 1f - 0.7f * MathF.Max(_drag, _fall);
@@ -300,6 +331,13 @@ public sealed class ProceduralAnimator
         _expressions.Set("blink", MathF.Sin(_blink / 0.16f * MathF.PI));
         _expressions.Set("happy", 0.25f * _idle + 0.15f * _walk + 0.35f * _sit + 0.3f * _jump);
         float startled = 0.7f * MathF.Max(_drag, _fall);
+        // Eyes squeezed shut and a pained face for a moment after a hard landing.
+        if (_tumble > 0.01f)
+        {
+            float wince = _tumble * MathF.Max(0f, 1f - _tumbleTime / 1.2f);
+            _expressions.Set("blink", wince * 0.8f);
+            _expressions.Set(_expressions.Has("sad") ? "sad" : "angry", 0.6f * _tumble);
+        }
         // VRM 0.x models have no "surprised" preset; an open mouth reads similarly.
         _expressions.Set(_expressions.Has("surprised") ? "surprised" : "oh", startled);
         _expressions.Commit();

@@ -94,6 +94,11 @@ internal sealed class Snapshot
                 brain.EndDrag(0f, 0f);
                 brain.ClimbTo(window.Y * 0.2f);
                 break;
+            case "tumble":
+                brain.BeginDrag();
+                brain.DragTo(centre, window.Y * 0.05f);
+                brain.EndDrag(0f, 0f);
+                break;
             case "sit":
                 // A ledge in the middle of the frame so the dangling legs are visible.
                 float ledge = window.Y * 0.62f;

@@ -368,7 +368,7 @@ public partial class MascotRoot : Node3D
             MascotState.Falling or MascotState.Jump => brain.Facing * FacingTurn * 0.6f,
             // Side on to the screen edge it is climbing.
             MascotState.Climb or MascotState.Cling => brain.WallSide * MathF.PI / 2f,
-            MascotState.Dragged or MascotState.Sit => 0f,
+            MascotState.Dragged or MascotState.Sit or MascotState.Tumble => 0f,
             _ => brain.Facing * 0.3f,
         };
         if (_snapshot?.Yaw is float yaw)

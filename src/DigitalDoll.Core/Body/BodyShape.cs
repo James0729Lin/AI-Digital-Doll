@@ -27,7 +27,8 @@ public sealed class BodyShape
     };
 
     private readonly Dictionary<string, float> _values = new();
-    private string _style = BodyStyle.Realistic;
+    // Anime is the app's look (D1 in docs/SPEC.md); realistic remains readable for old files.
+    private string _style = BodyStyle.Anime;
     private string _hair = HairCatalog.Default;
     private string _bangs = HairCatalog.DefaultBangs;
 
@@ -35,7 +36,7 @@ public sealed class BodyShape
     public string Style
     {
         get => _style;
-        set => _style = value == BodyStyle.Anime ? BodyStyle.Anime : BodyStyle.Realistic;
+        set => _style = value == BodyStyle.Realistic ? BodyStyle.Realistic : BodyStyle.Anime;
     }
 
     public string SkinColor { get; set; } = "#E0AC8A";

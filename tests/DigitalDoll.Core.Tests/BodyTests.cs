@@ -261,7 +261,7 @@ public class BodyTests : IClassFixture<BodyPackFixture>
         var anime = MorphWeights.Compute(shape);
         Assert.Empty(_f.Engine.MissingTargets(anime));
         Assert.True(anime.ContainsKey("eyes/l-eye-scale-incr") && anime.ContainsKey("eyes/r-eye-scale-incr"));
-        Assert.False(MorphWeights.Compute(new BodyShape()).ContainsKey("eyes/l-eye-scale-incr"));
+        Assert.False(MorphWeights.Compute(new BodyShape { Style = BodyStyle.Realistic }).ContainsKey("eyes/l-eye-scale-incr"));
     }
 
     [Theory]
@@ -387,7 +387,7 @@ public class BodyShapeTests
     public void UnknownLookValuesFallBackToDefaults()
     {
         var shape = new BodyShape { Style = "cubist", Hair = "mohawk-2000", Bangs = "??" };
-        Assert.Equal(BodyStyle.Realistic, shape.Style);
+        Assert.Equal(BodyStyle.Anime, shape.Style);
         Assert.Equal(HairCatalog.Default, shape.Hair);
         Assert.Equal(HairCatalog.DefaultBangs, shape.Bangs);
     }

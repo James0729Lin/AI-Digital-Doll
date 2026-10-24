@@ -12,10 +12,15 @@ public readonly record struct Platform(long Id, float X0, float X1, float Y)
 }
 
 /// <summary>
-/// A vertical surface the mascot can climb. <see cref="Side"/> is the direction from
-/// the mascot to the wall: -1 for the screen's left edge, +1 for its right edge.
+/// A vertical surface the mascot can climb: a screen edge or the side of a window.
+/// <see cref="Side"/> is the direction from the mascot to the wall (-1: the wall is on
+/// its left). <see cref="TopPlatform"/> is the window top it can climb onto at the
+/// upper end, if any.
 /// </summary>
-public readonly record struct Wall(long Id, float X, float Top, float Bottom, int Side);
+public readonly record struct Wall(long Id, float X, float Top, float Bottom, int Side, long? TopPlatform = null)
+{
+    public bool Spans(float y) => y >= Top - 0.5f && y <= Bottom + 0.5f;
+}
 
 /// <summary>A window on the desktop in window-local pixels, listed top of the Z-order first.</summary>
 public readonly record struct DesktopWindow(long Id, float Left, float Top, float Right, float Bottom);
@@ -54,11 +59,11 @@ public sealed class Surroundings
         return null;
     }
 
-    public Wall? FindWall(int side)
+    public Wall? FindWall(long id)
     {
         foreach (var w in Walls)
         {
-            if (w.Side == side)
+            if (w.Id == id)
                 return w;
         }
         return null;
@@ -111,6 +116,48 @@ public sealed class Surroundings
             new(LeftWallId, 0f, top, floorY, -1),
             new(RightWallId, width, top, floorY, 1),
         };
+
+        // Window sides: climbed from outside the window, up to its top edge.
+        float offset = characterHeight * 0.12f;
+        for (int i = 0; i < windows.Count; i++)
+        {
+            var w = windows[i];
+            foreach (var (x, side, slot) in new[] { (w.Left, 1, 8), (w.Right, -1, 12) })
+            {
+                // Room for the mascot beside the window, inside the screen.
+                float stand = x - side * offset;
+                if (stand < 0f || stand > width)
+                    continue;
+
+                var pieces = new List<(float A, float B)> { (Math.Max(w.Top, top), Math.Min(w.Bottom, floorY)) };
+                for (int j = 0; j < i; j++)
+                {
+                    var above = windows[j];
+                    if (above.Left - offset > x || above.Right + offset < x)
+                        continue;
+                    pieces = Subtract(pieces, above.Top, above.Bottom);
+                }
+
+                int index = 0;
+                foreach (var (a, b) in pieces)
+                {
+                    if (b - a >= characterHeight * 0.4f)
+                    {
+                        long? topPlatform = null;
+                        if (MathF.Abs(a - w.Top) < 0.5f)
+                        {
+                            foreach (var p in platforms)
+                            {
+                                if (p.Id / 16 == w.Id && MathF.Abs(p.Y - w.Top) < 0.5f && p.X0 - 2f <= x && x <= p.X1 + 2f)
+                                    topPlatform = p.Id;
+                            }
+                        }
+                        walls.Add(new Wall(w.Id * 16 + slot + index, x, a, b, side, topPlatform));
+                    }
+                    index++;
+                }
+            }
+        }
         return new Surroundings(width, height, platforms, walls);
     }
 
