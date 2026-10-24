@@ -153,6 +153,7 @@ jobs:
             **使用**：在桌面角色身上按右鍵可開啟選單；選「捏身材…」可自訂身材與五官。
             雙擊角色可以聊天（先在右鍵選單「AI 設定…」綁定 ChatGPT、Claude、Gemini、DeepSeek、Grok 或本地模型）；
             點一下是戳她、按住拖曳可拎起來、游標在頭上來回移動是摸頭。
+            右鍵選單「動物模式」可換成小貓、小狗、小雞、小豬。
 
             詳細說明見 [README](https://github.com/${{ github.repository }}#readme)。
 
