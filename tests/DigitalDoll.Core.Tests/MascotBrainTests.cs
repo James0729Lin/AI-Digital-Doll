@@ -226,6 +226,43 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void StayingKeepsToTheWindowAndFollowsIt()
+    {
+        foreach (int seed in new[] { 1, 2, 3 })
+        {
+            var brain = Create(seed, surroundings: WithWindow(300, 500, 1100, 900));
+            brain.BeginDrag();
+            brain.DragTo(700f, 400f);
+            brain.EndDrag(0f, 0f);
+            brain.Staying = true;
+            for (int i = 0; i < 60 * 300; i++)
+            {
+                brain.Update(1f / 60f);
+                if (brain.State is not (MascotState.Falling or MascotState.Landing))
+                    Assert.Equal(7 * 16, brain.PlatformId);
+            }
+            brain.SetSurroundings(WithWindow(500, 450, 1300, 850));
+            Assert.Equal(450f, brain.Y);
+            Assert.Equal(7 * 16, brain.PlatformId);
+        }
+    }
+
+    [Fact]
+    public void StayingOnAWallKeepsHoldingIt()
+    {
+        var brain = Create();
+        brain.BeginDrag();
+        brain.DragTo(10f, 500f);
+        brain.EndDrag(0f, 0f);
+        brain.Staying = true;
+        for (int i = 0; i < 60 * 120; i++)
+        {
+            brain.Update(1f / 60f);
+            Assert.Equal(Surroundings.LeftWallId, brain.WallId);
+        }
+    }
+
+    [Fact]
     public void ShortDropsLandOnTheFeet()
     {
         var brain = Create();

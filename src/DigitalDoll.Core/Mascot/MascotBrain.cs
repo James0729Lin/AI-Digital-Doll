@@ -113,6 +113,13 @@ public sealed class MascotBrain
     /// <summary>The wall being climbed (a screen edge or a window side), if any.</summary>
     public long? WallId => _wallId;
 
+    /// <summary>
+    /// When set, the mascot keeps to the surface it is on (a window top or side, or the
+    /// floor): it still walks, sits and climbs along it, but never leaves on its own.
+    /// It follows the window when it moves; dragging it elsewhere makes it stay there.
+    /// </summary>
+    public bool Staying { get; set; }
+
     public float TargetX { get; private set; }
     public float TargetY { get; private set; }
     public float StateTime => _stateTime;
@@ -310,6 +317,14 @@ public sealed class MascotBrain
         {
             (3f, () => EnterWalk(PickWalkTarget(here))),
         };
+        if (Staying)
+        {
+            options.Add((2f, () => EnterIdle()));
+            if (here.Id != Surroundings.FloorId)
+                options.Add((2f, () => { _plan = Plan.Sit; EnterWalk(PickWalkTarget(here, nearby: true)); }));
+            Choose(options);
+            return;
+        }
         // Sitting lets the legs hang below the surface, so only on window tops (on the
         // floor they would hang over the taskbar).
         if (here.Id != Surroundings.FloorId)
@@ -385,6 +400,16 @@ public sealed class MascotBrain
         }
 
         var floor = Surroundings.Floor;
+        if (Staying)
+        {
+            // Move a little up or down the same wall, or keep holding on.
+            Choose(new List<(float Weight, Action Act)>
+            {
+                (1f, () => StartClimb(wall, PickWallTarget(wall))),
+                (1f, () => StartCling(wall, Y)),
+            });
+            return;
+        }
         var options = new List<(float Weight, Action Act)>
         {
             (1.5f, () => StartClimb(wall, PickWallTarget(wall))),
@@ -547,7 +572,7 @@ public sealed class MascotBrain
             if (_wallId is long id && Surroundings.FindWall(id) is Wall wall)
             {
                 // At the top edge of a window: pull up onto it.
-                if (MathF.Abs(Y - wall.Top) < 1f && wall.TopPlatform is long top && Surroundings.FindPlatform(top) is Platform platform)
+                if (!Staying && MathF.Abs(Y - wall.Top) < 1f && wall.TopPlatform is long top && Surroundings.FindPlatform(top) is Platform platform)
                 {
                     LeaveWall();
                     X = Math.Clamp(wall.X + wall.Side * _tuning.Height * 0.15f, platform.X0, platform.X1);

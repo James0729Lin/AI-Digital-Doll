@@ -23,3 +23,6 @@ msgstr "捏身材…"
 
 msgid "MENU_USE_BODY"
 msgstr "使用捏好的身體"
+
+msgid "MENU_STAY"
+msgstr "待在這裡"

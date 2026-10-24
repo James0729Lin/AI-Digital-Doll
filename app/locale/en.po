@@ -23,3 +23,6 @@ msgstr "Body editor…"
 
 msgid "MENU_USE_BODY"
 msgstr "Use my edited body"
+
+msgid "MENU_STAY"
+msgstr "Stay here"

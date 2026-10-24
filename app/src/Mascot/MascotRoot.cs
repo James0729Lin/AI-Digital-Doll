@@ -32,6 +32,7 @@ public partial class MascotRoot : Node3D
     private const int MenuQuit = 3;
     private const int MenuCreator = 4;
     private const int MenuUseBody = 5;
+    private const int MenuStay = 6;
 
     private Camera3D _camera = null!;
     private Node3D _pivot = null!;
@@ -432,6 +433,7 @@ public partial class MascotRoot : Node3D
         _menu.AddItem(Tr("MENU_BODY_EDITOR"), MenuCreator);
         _menu.AddSeparator();
         _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
+        _menu.AddCheckItem(Tr("MENU_STAY"), MenuStay);
         _menu.AddItem(Tr("MENU_USE_BODY"), MenuUseBody);
         _menu.AddItem(Tr("MENU_LOAD_CHARACTER"), MenuLoad);
         _menu.AddItem(Tr("MENU_DEFAULT_CHARACTER"), MenuReset);
@@ -474,6 +476,13 @@ public partial class MascotRoot : Node3D
                 break;
             case MenuCreator:
                 AppWindow.OpenCreator(this);
+                break;
+            case MenuStay:
+                if (_brain != null)
+                {
+                    _brain.Staying = !_brain.Staying;
+                    _menu.SetItemChecked(_menu.GetItemIndex(MenuStay), _brain.Staying);
+                }
                 break;
         }
     }
