@@ -25,6 +25,7 @@ public partial class MascotRoot : Node3D
     private const float FacingTurn = 1.1f;
     private const float HitMargin = 5f;
     private const float HitSlack = 6f;
+    private const float LeadSeconds = 0.1f;
 
     private const int MenuCallOver = 0;
     private const int MenuLoad = 1;
@@ -410,9 +411,14 @@ public partial class MascotRoot : Node3D
         if (_region.Length >= 3 && Array.TrueForAll(tight, p => Geometry2D.IsPointInPolygon(p, _region)))
             return;
 
-        // A little slack so a breathing or walking character does not need a new
-        // window region (an expensive call on Windows) every frame.
-        float slack = _brain!.State == MascotState.Falling ? 0f : HitSlack;
+        // Slack so a breathing or walking character does not need a new window region
+        // (an expensive call on Windows) every frame. Windows applies a new region a
+        // frame or two after the frame it was computed for, and pixels outside the
+        // region are not drawn, so a fast fall or jump needs room for ~0.1 s of travel
+        // or its leading edge is cut off.
+        var brain = _brain!;
+        float speed = new Vector2(brain.VelocityX, brain.VelocityY).Length();
+        float slack = HitSlack + speed * LeadSeconds;
         SetMousePassthrough(_hitShape.Outline(_camera, HitMargin + slack));
     }
 
