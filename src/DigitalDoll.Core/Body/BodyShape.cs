@@ -27,16 +27,17 @@ public sealed class BodyShape
     };
 
     private readonly Dictionary<string, float> _values = new();
-    // Anime is the app's look (D1 in docs/SPEC.md); realistic remains readable for old files.
+    // Anime is the app's only look (D1 in docs/SPEC.md): bodies saved in the old
+    // realistic style open as anime.
     private string _style = BodyStyle.Anime;
     private string _hair = HairCatalog.Default;
     private string _bangs = HairCatalog.DefaultBangs;
 
-    /// <summary><see cref="BodyStyle.Realistic"/> or <see cref="BodyStyle.Anime"/>.</summary>
+    /// <summary>Always <see cref="BodyStyle.Anime"/>; kept so older files still read.</summary>
     public string Style
     {
         get => _style;
-        set => _style = value == BodyStyle.Realistic ? BodyStyle.Realistic : BodyStyle.Anime;
+        set => _style = BodyStyle.Anime;
     }
 
     public string SkinColor { get; set; } = "#E0AC8A";

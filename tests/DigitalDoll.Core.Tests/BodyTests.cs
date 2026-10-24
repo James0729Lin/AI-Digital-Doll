@@ -261,7 +261,8 @@ public class BodyTests : IClassFixture<BodyPackFixture>
         var anime = MorphWeights.Compute(shape);
         Assert.Empty(_f.Engine.MissingTargets(anime));
         Assert.True(anime.ContainsKey("eyes/l-eye-scale-incr") && anime.ContainsKey("eyes/r-eye-scale-incr"));
-        Assert.False(MorphWeights.Compute(new BodyShape { Style = BodyStyle.Realistic }).ContainsKey("eyes/l-eye-scale-incr"));
+        // Old realistic saves open as anime.
+        Assert.True(BodyShape.FromJson("{\"style\":\"realistic\"}").IsAnime);
     }
 
     [Theory]
