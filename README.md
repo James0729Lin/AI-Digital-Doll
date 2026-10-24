@@ -8,6 +8,18 @@
 
 介面語言：繁體中文、English。
 
+## 下載與使用（一般使用者）
+
+1. 到本頁右側的 **[Releases](../../releases)**，下載最新版的 `AIDigitalDoll-…-windows-x64.zip`。
+2. 解壓縮到任意資料夾（**整個資料夾都要保留**），執行 `AIDigitalDoll.exe`。
+3. 程式尚未數位簽章，若出現「Windows 已保護您的電腦」，請點「其他資訊」→「仍要執行」。
+4. 角色會出現在工作列上方。在角色身上按 **右鍵** 開啟選單：
+   - **捏身材…**：自訂身材與五官，按「回到桌面」後桌面角色就會換成您捏的樣子
+   - **載入 VRM 角色…**：使用 VRoid Studio 等工具做的 `.vrm` 角色（也可以直接把檔案拖到角色身上）
+   - **結束**：關閉程式
+
+系統需求：Windows 10 / 11（64 位元）、支援 OpenGL 3.3 的顯示卡。
+
 ## 目前進度
 
 **M0 技術驗證**（進行中）：透明桌面視窗、滑鼠穿透、執行期載入 VRM 角色、程序化待機/走路/拖曳/掉落動作、系統匣選單。
@@ -42,9 +54,10 @@ tools/                  建置與檢查工具
   makehuman/convert.py  MakeHuman CC0 素材轉檔
 ```
 
-## 開發
+## 從原始碼建置（開發者）
 
 需要 [.NET 8 SDK](https://dotnet.microsoft.com/) 與 [Godot 4.7.2 .NET 版](https://godotengine.org/download)。
+所有素材（MakeHuman CC0 轉檔結果、字型、範例角色）都已在原始碼庫中，複製下來即可建置，不需另外下載。
 
 ```bash
 dotnet test tests/DigitalDoll.Core.Tests      # 單元測試
@@ -57,7 +70,10 @@ godot --path app -- --creator --snapshot out.png --view side --set breast-size=1
 godot --path app -- --selftest                 # 桌面 → 捏身材 → 桌面 自動切換測試
 ```
 
-每次推送，GitHub Actions 都會執行單元測試、匯出 Windows 版，並用打包後的程式算圖做冒煙測試；Windows 版可在 Actions 的 Artifacts 下載。
+每次推送，GitHub Actions 都會執行單元測試、匯出 Windows 版，並用打包後的程式算圖做冒煙測試。
+
+**發佈新版**：在 GitHub 的 Actions → Build → Run workflow，於 `release` 欄位輸入版本號（例如 `v0.2.0`），
+或推送 `v*` 標籤，建置完成後會自動建立 Release 並附上 Windows 版 zip。
 
 ## 授權
 

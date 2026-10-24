@@ -2,13 +2,23 @@ name: Build
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a GitHub Release with this version (e.g. v0.2.0); leave empty to only build"
+        required: false
+        default: ""
 
 env:
   GODOT_VERSION: 4.7.2
   GODOT_SHA512: 1855960b27ee3ef5e66e5e228cced69d55637b24334a7411162687dcd077d8f9f645348cdb8eae984bec8135d49ed855a1e3a16476786b8bce60774fd8402d13
   TEMPLATES_SHA512: bb5c41d72370ed743660361f6228006f808ab04ca33abdc545d740b044f3fe057f32ae8cb7873a1bc86ddcd82ae683b9f6dfdfe4179852f2c0f1acde2ff6bd5a
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -106,3 +116,41 @@ jobs:
           name: snapshots
           path: build/snapshots
           retention-days: 7
+
+  # Publishes the Windows build as a GitHub Release, either for a pushed v* tag or
+  # when the workflow is started by hand with a version number.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release != '')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: AIDigitalDoll-windows-x64
+
+      - name: Name the download after the version
+        id: version
+        run: |
+          version="${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release }}"
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
+          mv AIDigitalDoll-windows-x64.zip "AIDigitalDoll-$version-windows-x64.zip"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: AI Digital Doll ${{ steps.version.outputs.tag }}
+          files: AIDigitalDoll-${{ steps.version.outputs.tag }}-windows-x64.zip
+          prerelease: true
+          body: |
+            Windows 10 / 11 (x64) 測試版。
+
+            **安裝**：下載下方的 zip，解壓縮到任意資料夾（整個資料夾都要保留），執行 `AIDigitalDoll.exe`。
+            程式尚未數位簽章，若出現「Windows 已保護您的電腦」，請點「其他資訊」→「仍要執行」。
+
+            **使用**：在桌面角色身上按右鍵可開啟選單；選「捏身材…」可自訂身材與五官。
+
+            詳細說明見 [README](https://github.com/${{ github.repository }}#readme)。
+
