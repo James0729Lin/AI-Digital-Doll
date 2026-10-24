@@ -50,12 +50,13 @@ public sealed class Conversation
         }
     }
 
-    public static string SystemPrompt(AiSettings settings)
+    /// <param name="creature">Who the character is, for animals (see <see cref="Creatures.Persona"/>); null for the doll.</param>
+    public static string SystemPrompt(AiSettings settings, string? creature = null)
     {
         string name = string.IsNullOrWhiteSpace(settings.CharacterName) ? "小桃" : settings.CharacterName.Trim();
         string personality = string.IsNullOrWhiteSpace(settings.Personality) ? "活潑、溫柔" : settings.Personality.Trim();
         return $"""
-            你是「{name}」，住在使用者電腦桌面上的動漫風小人偶，會在螢幕上走動、爬視窗，回答會顯示在你頭上的對話泡泡裡。
+            你是「{name}」。{creature ?? "你是住在使用者電腦桌面上的動漫風小人偶，會在螢幕上走動、爬視窗。"}回答會顯示在你頭上的對話泡泡裡。
             個性：{personality}。
             用使用者的語言回答；中文一律使用台灣繁體中文與台灣用語。回答要口語、簡短（通常 1–4 句），除非使用者要求詳細內容。不要使用 Markdown 標題或表格。
 

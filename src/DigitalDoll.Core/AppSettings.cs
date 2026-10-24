@@ -13,6 +13,17 @@ public enum CharacterSource
 
     /// <summary>The body made in the body editor.</summary>
     Body,
+
+    /// <summary>An animal (see <see cref="AppSettings.Animal"/>).</summary>
+    Animal,
+}
+
+public enum Species
+{
+    Cat,
+    Dog,
+    Chicken,
+    Pig,
 }
 
 /// <summary>User preferences stored as JSON in the user data folder.</summary>
@@ -26,6 +37,9 @@ public sealed class AppSettings
 
     [JsonPropertyName("character")]
     public CharacterSource Character { get; set; } = CharacterSource.Default;
+
+    [JsonPropertyName("animal")]
+    public Species Animal { get; set; } = Species.Cat;
 
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 
