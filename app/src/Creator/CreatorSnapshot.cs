@@ -12,6 +12,7 @@ namespace DigitalDoll.Creator;
 internal sealed class CreatorSnapshot
 {
     private readonly System.Collections.Generic.List<(string Key, float Value)> _values = new();
+    private string? _style, _hair, _bangs, _hairColour, _eyeColour;
     private string _output = "";
     private float _yaw;
     private string _frame = "full";
@@ -54,6 +55,21 @@ internal sealed class CreatorSnapshot
                     var parts = next.Split('x');
                     snapshot.WindowSize = new Vector2I(int.Parse(parts[0]), int.Parse(parts[1]));
                     break;
+                case "--style" when next != null:
+                    snapshot._style = next;
+                    break;
+                case "--hair" when next != null:
+                    snapshot._hair = next;
+                    break;
+                case "--bangs" when next != null:
+                    snapshot._bangs = next;
+                    break;
+                case "--hair-color" when next != null:
+                    snapshot._hairColour = next;
+                    break;
+                case "--eye-color" when next != null:
+                    snapshot._eyeColour = next;
+                    break;
                 case "--set" when next != null:
                     var kv = next.Split('=');
                     snapshot._values.Add((kv[0], float.Parse(kv[1], CultureInfo.InvariantCulture)));
@@ -66,6 +82,11 @@ internal sealed class CreatorSnapshot
     public void Apply(CreatorRoot root)
     {
         root.Shape.Reset();
+        if (_style != null) root.Shape.Style = _style;
+        if (_hair != null) root.Shape.Hair = _hair;
+        if (_bangs != null) root.Shape.Bangs = _bangs;
+        if (_hairColour != null) root.Shape.HairColor = _hairColour;
+        if (_eyeColour != null) root.Shape.EyeColor = _eyeColour;
         foreach (var (key, value) in _values)
             root.SetValue(key, value);
         root.SetAdvanced(_advanced);

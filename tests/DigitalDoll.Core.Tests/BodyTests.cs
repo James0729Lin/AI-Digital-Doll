@@ -255,6 +255,78 @@ public class BodyTests : IClassFixture<BodyPackFixture>
     }
 
     [Fact]
+    public void AnimeStyleAddsExistingFaceTargetsOnly()
+    {
+        var shape = new BodyShape { Style = BodyStyle.Anime };
+        var anime = MorphWeights.Compute(shape);
+        Assert.Empty(_f.Engine.MissingTargets(anime));
+        Assert.True(anime.ContainsKey("eyes/l-eye-scale-incr") && anime.ContainsKey("eyes/r-eye-scale-incr"));
+        Assert.False(MorphWeights.Compute(new BodyShape()).ContainsKey("eyes/l-eye-scale-incr"));
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("buzz")]
+    [InlineData("short")]
+    [InlineData("bob")]
+    [InlineData("medium")]
+    [InlineData("long")]
+    [InlineData("ponytail")]
+    [InlineData("twintails")]
+    public void HairStaysOutsideTheHeadAndAboveTheWaist(string style)
+    {
+        foreach (var bangs in HairCatalog.Bangs)
+        {
+            var shape = new BodyShape { Hair = style, Bangs = bangs.Id };
+            var p = _f.Engine.Apply(shape);
+            var hair = HairGenerator.Generate(_f.Pack, _f.Engine, p, NormalsOf(p), shape);
+            if (style == "none")
+            {
+                Assert.True(hair.IsEmpty);
+                continue;
+            }
+            Assert.False(hair.IsEmpty);
+            Assert.Equal(hair.Positions.Count, hair.Normals.Count);
+            Assert.Equal(hair.Positions.Count, hair.HeadWeights.Count);
+            Assert.All(hair.Triangles, i => Assert.InRange(i, 0, hair.Positions.Count - 1));
+
+            var (centre, radii) = HairGenerator.Skull(_f.Pack, p);
+            var hips = _f.Engine.JointCentre("pelvis", p);
+            foreach (var v in hair.Positions)
+            {
+                var q = (v - centre) / radii;
+                // The skull ellipsoid only approximates the head (the scalp layer sits on
+                // the real nape, inside it), so only hair deep inside counts as a failure.
+                Assert.True(q.Length() > 0.85f, $"{style}/{bangs.Id}: hair inside the skull at {v}");
+                Assert.True(v.Y > hips.Y, $"{style}/{bangs.Id}: hair below the hips at {v}");
+            }
+        }
+    }
+
+    private float[] NormalsOf(float[] p)
+    {
+        var n = new float[p.Length];
+        var tris = _f.Pack.Surfaces["body"];
+        for (int t = 0; t < tris.Length; t += 3)
+        {
+            int a = tris[t] * 3, b = tris[t + 1] * 3, c = tris[t + 2] * 3;
+            var ab = new System.Numerics.Vector3(p[b] - p[a], p[b + 1] - p[a + 1], p[b + 2] - p[a + 2]);
+            var ac = new System.Numerics.Vector3(p[c] - p[a], p[c + 1] - p[a + 1], p[c + 2] - p[a + 2]);
+            var f = System.Numerics.Vector3.Cross(ab, ac);
+            foreach (int v in new[] { a, b, c })
+            {
+                n[v] += f.X; n[v + 1] += f.Y; n[v + 2] += f.Z;
+            }
+        }
+        for (int v = 0; v < n.Length; v += 3)
+        {
+            var len = MathF.Sqrt(n[v] * n[v] + n[v + 1] * n[v + 1] + n[v + 2] * n[v + 2]);
+            if (len > 0) { n[v] /= len; n[v + 1] /= len; n[v + 2] /= len; }
+        }
+        return n;
+    }
+
+    [Fact]
     public void ThreeWayWeightsSumToOne()
     {
         foreach (float v in new[] { 0f, 0.2f, 0.5f, 0.8f, 1f })
@@ -297,7 +369,11 @@ public class BodyShapeTests
     [Fact]
     public void JsonRoundTripKeepsEverything()
     {
-        var shape = new BodyShape { SkinColor = "#C08060", UnderwearColor = "#FFFFFF" };
+        var shape = new BodyShape
+        {
+            SkinColor = "#C08060", UnderwearColor = "#FFFFFF", Style = BodyStyle.Anime,
+            EyeColor = "#3060A0", HairColor = "#E0C080", Hair = "twintails", Bangs = "parted",
+        };
         shape.Set("gender", 1f);
         shape.Set("upperleg-fat.r", -0.4f);
         shape.Set("shape-fem-full-hourglass", 0.7f);
@@ -305,6 +381,15 @@ public class BodyShapeTests
         var copy = BodyShape.FromJson(shape.ToJson());
         Assert.True(copy.SameAs(shape));
         Assert.Equal(-0.4f, copy.Get("upperleg-fat.r"), 4);
+    }
+
+    [Fact]
+    public void UnknownLookValuesFallBackToDefaults()
+    {
+        var shape = new BodyShape { Style = "cubist", Hair = "mohawk-2000", Bangs = "??" };
+        Assert.Equal(BodyStyle.Realistic, shape.Style);
+        Assert.Equal(HairCatalog.Default, shape.Hair);
+        Assert.Equal(HairCatalog.DefaultBangs, shape.Bangs);
     }
 
     [Fact]

@@ -426,7 +426,7 @@ public partial class CreatorRoot : Control
         _camera = new Camera3D { Fov = 30f, Near = 0.05f, Far = 50f, Current = true };
         world.AddChild(_camera);
 
-        AddLight(world, new Vector3(-35f, 30f, 0f), 0.55f, new Color("#ffffff"), shadows: true);
+        AddLight(world, new Vector3(-35f, 30f, 0f), 0.55f, new Color("#ffffff"), shadows: false);
         AddLight(world, new Vector3(-15f, -60f, 0f), 0.25f, new Color("#dbe6ff"), shadows: false);
         AddLight(world, new Vector3(-20f, 160f, 0f), 0.35f, new Color("#ffffff"), shadows: false);
 

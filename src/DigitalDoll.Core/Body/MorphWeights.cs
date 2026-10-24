@@ -22,6 +22,39 @@ public static class MorphWeights
 
     public const string FabricSmoothing = "breast/nipple-point-decr";
 
+    /// <summary>
+    /// Anime proportions, added on top of the user's own sliders when the anime style
+    /// is chosen: big open eyes, small nose and mouth, a narrow chin, a slightly larger
+    /// head and a slimmer neck.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Target, float Weight)> AnimeFace = new[]
+    {
+        ("eyes/{side}-eye-scale-incr", 1f),
+        ("eyes/{side}-eye-height2-incr", 0.7f),
+        ("eyes/{side}-eye-trans-down", 0.25f),
+        ("eyes/{side}-eye-trans-out", 0.2f),
+        ("eyes/{side}-eye-epicanthus-out", 0.3f),
+        ("nose/nose-scale-horiz-decr", 0.7f),
+        ("nose/nose-scale-vert-decr", 0.45f),
+        ("nose/nose-scale-depth-decr", 0.5f),
+        ("nose/nose-point-width-decr", 0.7f),
+        ("nose/nose-nostrils-width-decr", 0.7f),
+        ("mouth/mouth-scale-horiz-decr", 0.4f),
+        ("mouth/mouth-upperlip-volume-decr", 0.6f),
+        ("mouth/mouth-lowerlip-volume-decr", 0.5f),
+        ("chin/chin-width-decr", 0.6f),
+        ("chin/chin-bones-decr", 0.7f),
+        ("chin/chin-prominent-decr", 0.3f),
+        ("cheek/{side}-cheek-bones-decr", 0.6f),
+        ("head/head-invertedtriangular", 0.45f),
+        ("head/head-scale-horiz-incr", 0.25f),
+        ("head/head-scale-vert-incr", 0.2f),
+        ("head/head-scale-depth-incr", 0.2f),
+        ("forehead/forehead-scale-vert-incr", 0.3f),
+        ("neck/neck-scale-horiz-decr", 0.5f),
+        ("ears/{side}-ear-scale-decr", 0.3f),
+    };
+
     public static Dictionary<string, float> Compute(BodyShape shape)
     {
         var weights = new Dictionary<string, float>();
@@ -88,6 +121,22 @@ public static class MorphWeights
 
         // The fitted top covers the chest; keep its surface smooth like fabric.
         Add(weights, FabricSmoothing, 1f);
+
+        if (shape.IsAnime)
+        {
+            foreach (var (target, weight) in AnimeFace)
+            {
+                if (target.Contains("{side}"))
+                {
+                    Add(weights, target.Replace("{side}", "l"), weight);
+                    Add(weights, target.Replace("{side}", "r"), weight);
+                }
+                else
+                {
+                    Add(weights, target, weight);
+                }
+            }
+        }
 
         foreach (var def in BodyCatalog.Sliders)
         {
