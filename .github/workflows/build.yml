@@ -151,6 +151,8 @@ jobs:
             程式尚未數位簽章，若出現「Windows 已保護您的電腦」，請點「其他資訊」→「仍要執行」。
 
             **使用**：在桌面角色身上按右鍵可開啟選單；選「捏身材…」可自訂身材與五官。
+            雙擊角色可以聊天（先在右鍵選單「AI 設定…」綁定 ChatGPT、Claude、Gemini、DeepSeek、Grok 或本地模型）；
+            點一下是戳她、按住拖曳可拎起來、游標在頭上來回移動是摸頭。
 
             詳細說明見 [README](https://github.com/${{ github.repository }}#readme)。
 
