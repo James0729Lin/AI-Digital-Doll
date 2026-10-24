@@ -42,6 +42,7 @@ public static class BodyCharacter
         var body = new MeshInstance3D { Name = "Body", Mesh = mesh, Skin = skin };
         skeleton.AddChild(body);
         body.Skeleton = new NodePath("..");
+        BodyJiggle.Attach(skeleton, body, builder.JiggleMaterials, shape);
         return root;
     }
 }

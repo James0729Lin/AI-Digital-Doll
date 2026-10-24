@@ -30,8 +30,11 @@ uniform float face_front;    // rest z in front of which the face is painted
 
 varying vec3 rest;
 
+#include "res://assets/shaders/jiggle.gdshaderinc"
+
 void vertex() {
 	rest = vec3(UV2.x, UV2.y, UV.x);
+	VERTEX += jiggle(rest);
 }
 
 float inside(float value, float low, float high, float soft) {

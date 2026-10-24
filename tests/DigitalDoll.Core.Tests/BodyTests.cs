@@ -431,3 +431,55 @@ public class AppSettingsTests
         Assert.Equal(CharacterSource.Default, AppSettings.FromJson(json).Character);
     }
 }
+
+public class JiggleTests : IClassFixture<BodyPackFixture>
+{
+    private readonly BodyPackFixture _f;
+
+    public JiggleTests(BodyPackFixture f) => _f = f;
+
+    [Fact]
+    public void RegionsSitOnTheChestAndBehind()
+    {
+        var (bust, buttocks) = JiggleRegions.Find(_f.Pack);
+        Assert.InRange(bust.Centre.X, 0.04f, 0.13f);
+        Assert.True(bust.Centre.Z > 0.08f, "bust in front");
+        Assert.True(buttocks.Centre.Z < 0f, "buttocks behind");
+        Assert.True(bust.Centre.Y > buttocks.Centre.Y + 0.2f);
+        Assert.InRange(bust.Radii.X, 0.03f, 0.15f);
+    }
+
+    [Fact]
+    public void BiggerSofterBustsMoveMore()
+    {
+        var small = new BodyShape();
+        small.Set("breast-size", 0.1f);
+        var big = new BodyShape();
+        big.Set("breast-size", 1f);
+        big.Set("breast-firmness", 0.1f);
+        var male = new BodyShape();
+        male.Set("gender", 1f);
+        Assert.True(JiggleRegions.BustAmount(big) > JiggleRegions.BustAmount(small) * 2f);
+        Assert.True(JiggleRegions.BustAmount(male) < 0.05f);
+    }
+
+    [Fact]
+    public void SpringBouncesAgainstAccelerationAndSettles()
+    {
+        var spring = new JiggleSpring(3f, 0.25f, 0.03f);
+        // A sudden stop of a downward motion (landing): acceleration upward.
+        spring.Update(1f / 60f, new System.Numerics.Vector3(0f, 300f, 0f));
+        Assert.True(spring.Offset.Y < 0f, "lags downward");
+        Assert.True(spring.Offset.Length() <= 0.03f + 1e-5f);
+        float maxUp = 0f;
+        for (int i = 0; i < 60; i++)
+        {
+            spring.Update(1f / 60f, System.Numerics.Vector3.Zero);
+            maxUp = MathF.Max(maxUp, spring.Offset.Y);
+        }
+        Assert.True(maxUp > 0.002f, "bounces back up");
+        for (int i = 0; i < 600; i++)
+            spring.Update(1f / 60f, System.Numerics.Vector3.Zero);
+        Assert.True(spring.Offset.Length() < 1e-4f, "settles");
+    }
+}

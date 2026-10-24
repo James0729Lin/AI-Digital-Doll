@@ -65,6 +65,16 @@ public sealed class BodyMeshBuilder
         _headBone = BoneIndex(pack, "Head");
         _chestBone = BoneIndex(pack, "UpperChest");
 
+        // Where the body jiggles; the offsets are set by BodyJiggle on the desktop.
+        var (bust, buttocks) = JiggleRegions.Find(Engine.Pack);
+        foreach (var material in JiggleMaterials)
+        {
+            material.SetShaderParameter("bust_centre", ToGodot(bust.Centre));
+            material.SetShaderParameter("bust_radii", ToGodot(bust.Radii));
+            material.SetShaderParameter("buttocks_centre", ToGodot(buttocks.Centre));
+            material.SetShaderParameter("buttocks_radii", ToGodot(buttocks.Radii));
+        }
+
         foreach (var name in new[] { "body", "eyes" })
         {
             if (Engine.Pack.Surfaces.TryGetValue(name, out var tris))
@@ -73,6 +83,11 @@ public sealed class BodyMeshBuilder
     }
 
     public MorphEngine Engine { get; }
+
+    /// <summary>The body and its outline: both move the jiggling regions.</summary>
+    public ShaderMaterial[] JiggleMaterials => new[] { _bodyMaterial, _bodyOutline };
+
+    private static Vector3 ToGodot(System.Numerics.Vector3 v) => new(v.X, v.Y, v.Z);
 
     /// <summary>Height of the last built body in metres (feet to crown).</summary>
     public float BodyHeight { get; private set; }
