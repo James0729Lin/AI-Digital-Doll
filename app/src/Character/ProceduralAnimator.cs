@@ -22,7 +22,8 @@ public sealed class ProceduralAnimator
 
     private float _time;
     private float _walkPhase;
-    private float _idle = 1f, _walk, _drag, _fall, _land;
+    private float _idle = 1f, _walk, _drag, _fall, _land, _climb, _sit, _jump;
+    private float _climbPhase;
     private float _dangle, _dangleVelocity;
     private float _lookYaw, _lookPitch;
     private float _nextBlink = 2f, _blink;
@@ -40,9 +41,14 @@ public sealed class ProceduralAnimator
     public float LookYaw { get; set; }
     public float LookPitch { get; set; }
 
-    public void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres)
+    public void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f)
     {
         _time += dt;
+        Ease(ref _climb, state is MascotState.Climb or MascotState.Cling ? 1f : 0f, dt);
+        Ease(ref _sit, state == MascotState.Sit ? 1f : 0f, dt, 6f);
+        Ease(ref _jump, state == MascotState.Jump ? 1f : 0f, dt, 14f);
+        // Hand over hand: one full cycle per ~0.55 character-heights climbed.
+        _climbPhase = (_climbPhase + dt * Mathf.Tau * MathF.Abs(climbSpeedMetres) / (0.55f * _rig.Height)) % Mathf.Tau;
         Ease(ref _idle, state == MascotState.Idle ? 1f : 0f, dt);
         Ease(ref _walk, state == MascotState.Walk ? 1f : 0f, dt);
         Ease(ref _drag, state == MascotState.Dragged ? 1f : 0f, dt);
@@ -67,6 +73,9 @@ public sealed class ProceduralAnimator
         PoseDragged();
         PoseFalling();
         PoseLanding();
+        PoseClimb();
+        PoseSit();
+        PoseJump();
         PoseHead();
         _rig.Commit();
 
@@ -76,12 +85,12 @@ public sealed class ProceduralAnimator
     private void PoseBase()
     {
         // Lower the arms from the rest pose (T or A); dragging and falling raise them again.
-        float lower = ArmsDown * (1f - 0.35f * _drag - 1.6f * _fall) - _rig.ArmDroop;
+        float lower = ArmsDown * (1f - 0.35f * _drag - 1.6f * _fall - 0.5f * _jump) - _rig.ArmDroop;
         var f = _rig.Forward;
         _rig.Rotate("LeftUpperArm", f, -lower);
         _rig.Rotate("RightUpperArm", f, lower);
-        _rig.Rotate("LeftLowerArm", _rig.Left, -0.18f);
-        _rig.Rotate("RightLowerArm", _rig.Left, -0.18f);
+        _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, 0.18f);
+        _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, 0.18f);
         _rig.Rotate("LeftLowerArm", _rig.Up, 0.25f);
         _rig.Rotate("RightLowerArm", _rig.Up, -0.25f);
     }
@@ -137,8 +146,8 @@ public sealed class ProceduralAnimator
         // Arms swing opposite to the legs.
         _rig.Rotate("LeftUpperArm", left, 0.38f * s * w);
         _rig.Rotate("RightUpperArm", left, -0.38f * s * w);
-        _rig.Rotate("LeftLowerArm", left, -0.25f * MathF.Max(0f, -s) * w);
-        _rig.Rotate("RightLowerArm", left, -0.25f * MathF.Max(0f, s) * w);
+        _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, 0.25f * MathF.Max(0f, -s) * w);
+        _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, 0.25f * MathF.Max(0f, s) * w);
     }
 
     private void PoseDragged()
@@ -197,6 +206,66 @@ public sealed class ProceduralAnimator
         _rig.Rotate("RightUpperArm", left, -0.4f * w);
     }
 
+    private void PoseClimb()
+    {
+        float w = _climb;
+        if (w <= 0.001f)
+            return;
+        var left = _rig.Left;
+        float s = MathF.Sin(_climbPhase);
+        // Arms reach up the wall in turns; the opposite knee lifts with each reach.
+        _rig.Rotate("LeftUpperArm", left, -(2.45f + 0.35f * s) * w);
+        _rig.Rotate("RightUpperArm", left, -(2.45f - 0.35f * s) * w);
+        _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, (0.55f - 0.3f * s) * w);
+        _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, (0.55f + 0.3f * s) * w);
+        _rig.Rotate("LeftUpperLeg", left, -(0.55f - 0.4f * s) * w);
+        _rig.Rotate("RightUpperLeg", left, -(0.55f + 0.4f * s) * w);
+        _rig.Rotate("LeftLowerLeg", left, (1.0f - 0.35f * s) * w);
+        _rig.Rotate("RightLowerLeg", left, (1.0f + 0.35f * s) * w);
+        _rig.Rotate("Spine", left, 0.12f * w);
+        _rig.Rotate("Head", left, -0.3f * w);
+        // Hold-still breathing while clinging.
+        _rig.OffsetHips(_rig.Up * (0.01f * _legScale * MathF.Sin(_time * 1.6f) * w));
+    }
+
+    private void PoseSit()
+    {
+        float w = _sit;
+        if (w <= 0.001f)
+            return;
+        var left = _rig.Left;
+        // Sit on the edge of the surface: hips drop to the feet line, legs dangle over it.
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * 0.93f * w));
+        float swing = MathF.Sin(_time * 2.3f);
+        _rig.Rotate("LeftUpperLeg", left, -1.5f * w);
+        _rig.Rotate("RightUpperLeg", left, -1.5f * w);
+        _rig.Rotate("LeftLowerLeg", left, (1.45f + 0.18f * swing) * w);
+        _rig.Rotate("RightLowerLeg", left, (1.45f - 0.18f * swing) * w);
+        _rig.Rotate("LeftUpperLeg", _rig.Forward, -0.08f * w);
+        _rig.Rotate("RightUpperLeg", _rig.Forward, 0.08f * w);
+        _rig.Rotate("Spine", left, 0.06f * w);
+        // Hands resting on the thighs.
+        _rig.Rotate("LeftUpperArm", left, -0.2f * w);
+        _rig.Rotate("RightUpperArm", left, -0.2f * w);
+        _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, 0.95f * w);
+        _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, 0.95f * w);
+    }
+
+    private void PoseJump()
+    {
+        float w = _jump;
+        if (w <= 0.001f)
+            return;
+        var left = _rig.Left;
+        _rig.Rotate("LeftUpperLeg", left, -0.7f * w);
+        _rig.Rotate("RightUpperLeg", left, -0.35f * w);
+        _rig.Rotate("LeftLowerLeg", left, 1.1f * w);
+        _rig.Rotate("RightLowerLeg", left, 0.7f * w);
+        _rig.Rotate("Spine", left, 0.1f * w);
+        _rig.Rotate("LeftUpperArm", left, -0.5f * w);
+        _rig.Rotate("RightUpperArm", left, -0.2f * w);
+    }
+
     private void PoseHead()
     {
         float w = 1f - 0.7f * MathF.Max(_drag, _fall);
@@ -229,7 +298,7 @@ public sealed class ProceduralAnimator
 
         _expressions.Begin();
         _expressions.Set("blink", MathF.Sin(_blink / 0.16f * MathF.PI));
-        _expressions.Set("happy", 0.25f * _idle + 0.15f * _walk);
+        _expressions.Set("happy", 0.25f * _idle + 0.15f * _walk + 0.35f * _sit + 0.3f * _jump);
         float startled = 0.7f * MathF.Max(_drag, _fall);
         // VRM 0.x models have no "surprised" preset; an open mouth reads similarly.
         _expressions.Set(_expressions.Has("surprised") ? "surprised" : "oh", startled);

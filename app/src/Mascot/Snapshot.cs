@@ -73,8 +73,11 @@ internal sealed class Snapshot
         {
             case "walk":
                 // Endless floor; the root keeps the character centred in the frame.
-                brain.SetGround(new Ground(-1e6f, 1e6f, brain.Ground.FloorY));
-                brain.WalkTo(1e5f);
+                float floorY = brain.Surroundings.Floor.Y;
+                brain.SetSurroundings(new Surroundings(2e6f, window.Y,
+                    new[] { new DigitalDoll.Core.Mascot.Platform(Surroundings.FloorId, 0f, 2e6f, floorY) }, Array.Empty<Wall>()));
+                brain.PlaceAt(1e6f);
+                brain.WalkTo(2e6f);
                 break;
             case "drag":
                 brain.BeginDrag();
@@ -84,6 +87,20 @@ internal sealed class Snapshot
                 brain.BeginDrag();
                 brain.DragTo(centre, window.Y * 0.45f);
                 brain.EndDrag(0f, 0f);
+                break;
+            case "climb":
+                brain.BeginDrag();
+                brain.DragTo(4f, window.Y * 0.9f);
+                brain.EndDrag(0f, 0f);
+                brain.ClimbTo(window.Y * 0.2f);
+                break;
+            case "sit":
+                // A ledge in the middle of the frame so the dangling legs are visible.
+                float ledge = window.Y * 0.62f;
+                brain.SetSurroundings(new Surroundings(window.X, window.Y,
+                    new[] { new DigitalDoll.Core.Mascot.Platform(Surroundings.FloorId, 0f, window.X, ledge) }, Array.Empty<Wall>()));
+                brain.PlaceAt(centre);
+                brain.SitDown();
                 break;
             case "land":
                 brain.BeginDrag();

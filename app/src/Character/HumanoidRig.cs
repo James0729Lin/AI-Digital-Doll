@@ -53,7 +53,11 @@ public sealed class HumanoidRig
         var arm = BoneRestPosition("LeftLowerArm") - BoneRestPosition("LeftUpperArm");
         ArmDroop = arm.LengthSquared() > 1e-8f ? Mathf.Atan2(-arm.Y, new Vector2(arm.X, arm.Z).Length()) : 0f;
 
+        LeftElbowHinge = Hinge("LeftLowerArm", "LeftHand");
+        RightElbowHinge = Hinge("RightLowerArm", "RightHand");
+
         float footY = Mathf.Min(BoneRestPosition("LeftFoot").Y, BoneRestPosition("RightFoot").Y);
+        HipHeight = BoneRestPosition("Hips").Y;
         float headY = BoneRestPosition("Head").Y;
         // The head bone sits around the jaw; the crown is roughly 0.2 m above it on an adult.
         Height = Mathf.Max(headY - footY, 0.3f) * 1.14f;
@@ -72,6 +76,16 @@ public sealed class HumanoidRig
 
     /// <summary>How far the rest pose's upper arms already point below horizontal (radians).</summary>
     public float ArmDroop { get; }
+
+    /// <summary>
+    /// Elbow axes in the rest frame: a positive rotation about them bends the forearm
+    /// forward, whether the rest pose holds the arms level (T) or lowered (A).
+    /// </summary>
+    public Vector3 LeftElbowHinge { get; }
+    public Vector3 RightElbowHinge { get; }
+
+    /// <summary>Rest height of the hips above the skeleton origin (the floor).</summary>
+    public float HipHeight { get; }
 
     /// <summary>Rest height of the ankle above the skeleton origin.</summary>
     public float FootHeight { get; }
@@ -130,6 +144,13 @@ public sealed class HumanoidRig
         _bones.TryGetValue(bone, out int index)
             ? Skeleton.GlobalTransform * Skeleton.GetBoneGlobalPose(index).Origin
             : Skeleton.GlobalPosition;
+
+    private Vector3 Hinge(string from, string to)
+    {
+        var direction = BoneRestPosition(to) - BoneRestPosition(from);
+        var hinge = direction.Cross(Forward);
+        return hinge.LengthSquared() > 1e-10f ? hinge.Normalized() : Left;
+    }
 
     private Vector3 BoneRestPosition(string bone)
     {

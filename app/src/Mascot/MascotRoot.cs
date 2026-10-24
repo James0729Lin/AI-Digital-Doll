@@ -51,6 +51,7 @@ public partial class MascotRoot : Node3D
     private float _modelHeight = 1.6f;
     private float _yaw;
     private float _screenCheck;
+    private float _windowsCheck;
     private Vector2[] _region = Array.Empty<Vector2>();
 
     private bool _dragging;
@@ -120,6 +121,14 @@ public partial class MascotRoot : Node3D
                 _screenCheck = 2f;
                 ConfigureDesktopWindow();
             }
+            _windowsCheck -= dt;
+            if (_windowsCheck <= 0f)
+            {
+                // Windows move, open and close; a few refreshes a second keeps the
+                // mascot on top of them without a noticeable cost.
+                _windowsCheck = 0.25f;
+                _brain.SetSurroundings(BuildSurroundings());
+            }
         }
 
         if (_dragging)
@@ -132,7 +141,8 @@ public partial class MascotRoot : Node3D
         _animator.LookPitch = 0f;
         if (_brain.State == MascotState.Idle && _snapshot == null)
             AimHeadAtCursor();
-        _animator.Update(dt, _brain.State, _brain.VelocityX / _pixelsPerMetre, _dragVelocity.X / _pixelsPerMetre);
+        _animator.Update(dt, _brain.State, _brain.VelocityX / _pixelsPerMetre, _dragVelocity.X / _pixelsPerMetre,
+            _brain.State == MascotState.Climb ? _brain.VelocityY / _pixelsPerMetre : 0f);
 
         if (_snapshot == null)
         {
@@ -193,7 +203,7 @@ public partial class MascotRoot : Node3D
         _windowSize = size;
         _heightPixels = CharacterHeightPoints * Mathf.Clamp(scale, 1f, 3f);
         UpdateCamera();
-        _brain?.SetGround(GroundForWindow());
+        _brain?.SetSurroundings(BuildSurroundings());
 
         if (_brain == null)
             WindowsNative.HideFromTaskbar(DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle));
@@ -207,7 +217,24 @@ public partial class MascotRoot : Node3D
         _heightPixels = snapshot.WindowSize.Y * 0.8f;
     }
 
-    private Ground GroundForWindow() => new(0f, _windowSize.X, _windowSize.Y - 1f);
+    /// <summary>The floor, the screen edges and the tops of the visible windows, in window pixels.</summary>
+    private Surroundings BuildSurroundings()
+    {
+        if (_snapshot != null)
+            return Surroundings.Screen(_windowSize.X, _windowSize.Y, _heightPixels);
+
+        var origin = GetWindow().Position;
+        long own = DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle);
+        var windows = new List<DesktopWindow>();
+        foreach (var (id, bounds) in WindowsNative.VisibleWindows(own))
+        {
+            var local = new Rect2I(bounds.Position - origin, bounds.Size);
+            if (!local.Intersects(new Rect2I(Vector2I.Zero, _windowSize)))
+                continue;
+            windows.Add(new DesktopWindow(id, local.Position.X, local.Position.Y, local.End.X, local.End.Y));
+        }
+        return Surroundings.FromWindows(_windowSize.X, _windowSize.Y, _heightPixels, windows);
+    }
 
     private void UpdateCamera()
     {
@@ -295,8 +322,14 @@ public partial class MascotRoot : Node3D
         _modelHeight = MeasureHeight(model, _pivot);
         UpdateCamera();
         if (_brain == null)
-            _brain = new MascotBrain(new MascotTuning { WalkSpeed = 0.55f * _pixelsPerMetre }, _random,
-                _windowSize.X * 0.7f, GroundForWindow());
+            _brain = new MascotBrain(
+                new MascotTuning
+                {
+                    WalkSpeed = 0.55f * _pixelsPerMetre,
+                    ClimbSpeed = 0.32f * _pixelsPerMetre,
+                    Height = _heightPixels,
+                },
+                _random, _windowSize.X * 0.7f, BuildSurroundings());
         return true;
     }
 
@@ -332,8 +365,10 @@ public partial class MascotRoot : Node3D
         float target = brain.State switch
         {
             MascotState.Walk => brain.Facing * FacingTurn,
-            MascotState.Falling => brain.Facing * FacingTurn * 0.6f,
-            MascotState.Dragged => 0f,
+            MascotState.Falling or MascotState.Jump => brain.Facing * FacingTurn * 0.6f,
+            // Side on to the screen edge it is climbing.
+            MascotState.Climb or MascotState.Cling => brain.WallSide * MathF.PI / 2f,
+            MascotState.Dragged or MascotState.Sit => 0f,
             _ => brain.Facing * 0.3f,
         };
         if (_snapshot?.Yaw is float yaw)
