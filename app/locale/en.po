@@ -26,3 +26,138 @@ msgstr "Use my edited body"
 
 msgid "MENU_STAY"
 msgstr "Stay here"
+
+msgid "MENU_CHAT"
+msgstr "Chat… (or double-click her)"
+
+msgid "MENU_AI_SETTINGS"
+msgstr "AI settings…"
+
+msgid "CHAT_TITLE"
+msgstr "Chat"
+
+msgid "CHAT_PROVIDER_TIP"
+msgstr "Which AI to ask"
+
+msgid "CHAT_PLACEHOLDER"
+msgstr "Say something…"
+
+msgid "CHAT_SEND"
+msgstr "Send"
+
+msgid "CHAT_STOP"
+msgstr "Stop"
+
+msgid "CHAT_HINT"
+msgstr "Enter sends · Esc closes · \"@name question\" asks a specific AI"
+
+msgid "CHAT_NO_PROVIDER"
+msgstr "(no AI set up)"
+
+msgid "CHAT_DEFAULT_PROVIDER"
+msgstr "Default: {0}"
+
+msgid "CHAT_SETUP_FIRST"
+msgstr "No AI is set up yet! Add a service in AI settings first."
+
+msgid "CHAT_NEED_MODEL"
+msgstr "{0} has no model selected yet. Pick one in AI settings."
+
+msgid "CHAT_EMPTY"
+msgstr "The AI sent an empty reply"
+
+msgid "AI_TITLE"
+msgstr "AI settings"
+
+msgid "AI_SERVICES"
+msgstr "AI services (★ = default)"
+
+msgid "AI_ADD"
+msgstr "Add…"
+
+msgid "AI_REMOVE"
+msgstr "Remove"
+
+msgid "AI_NAME"
+msgstr "Name"
+
+msgid "AI_URL"
+msgstr "Address"
+
+msgid "AI_KEY"
+msgstr "API key"
+
+msgid "AI_KEY_PLACEHOLDER"
+msgstr "Paste your API key"
+
+msgid "AI_KEY_NOT_NEEDED"
+msgstr "Local models need no key"
+
+msgid "AI_KEY_HELP"
+msgstr "How do I get one?"
+
+msgid "AI_MODEL"
+msgstr "Model"
+
+msgid "AI_MODEL_PLACEHOLDER"
+msgstr "Model name, or fetch the list"
+
+msgid "AI_MODEL_LIST"
+msgstr "Fetch list"
+
+msgid "AI_MAKE_DEFAULT"
+msgstr "Make default"
+
+msgid "AI_TEST"
+msgstr "Test connection"
+
+msgid "AI_CHARACTER_NAME"
+msgstr "Character name"
+
+msgid "AI_PERSONALITY"
+msgstr "Personality"
+
+msgid "AI_NOTE"
+msgstr "Keys are stored encrypted on this computer only. Each AI service bills you directly; local models (Ollama, LM Studio) are free but must be installed first."
+
+msgid "AI_SAVE"
+msgstr "Save and close"
+
+msgid "AI_START_HINT"
+msgstr "Click Add… to pick an AI service, paste your key, choose a model, then Test connection."
+
+msgid "AI_LOADING_MODELS"
+msgstr "Fetching models…"
+
+msgid "AI_NO_MODELS"
+msgstr "No models found; type the model name instead."
+
+msgid "AI_MODELS_FOUND"
+msgstr "Found {0} models; pick one."
+
+msgid "AI_NEED_MODEL"
+msgstr "Enter or pick a model first."
+
+msgid "AI_TESTING"
+msgstr "Testing…"
+
+msgid "AI_TEST_OK"
+msgstr "Connected! Reply: {0}"
+
+msgid "ERR_KEY"
+msgstr "The key seems wrong, or it can't use this model… ({0})"
+
+msgid "ERR_RATE"
+msgstr "Too many requests or out of credit. Ask me again in a bit? ({0})"
+
+msgid "ERR_SERVER"
+msgstr "The AI service is having trouble. Try again later. ({0})"
+
+msgid "ERR_NETWORK"
+msgstr "I can't reach the AI service. Check the network or address? ({0})"
+
+msgid "ERR_REFUSED"
+msgstr "I can't answer that one."
+
+msgid "ERR_OTHER"
+msgstr "Something went wrong: {0}"

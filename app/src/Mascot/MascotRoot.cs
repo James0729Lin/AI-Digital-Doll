@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DigitalDoll.Body;
 using DigitalDoll.Character;
+using DigitalDoll.Chat;
 using DigitalDoll.Core;
 using DigitalDoll.Core.Acting;
 using DigitalDoll.Core.Body;
@@ -40,6 +41,8 @@ public partial class MascotRoot : Node3D
     private const int MenuCreator = 4;
     private const int MenuUseBody = 5;
     private const int MenuStay = 6;
+    private const int MenuChat = 7;
+    private const int MenuAiSettings = 8;
 
     private Camera3D _camera = null!;
     private Node3D _pivot = null!;
@@ -78,6 +81,7 @@ public partial class MascotRoot : Node3D
     private Vector2 _dragVelocity;
 
     private Snapshot? _snapshot;
+    private ChatController? _chat;
 
     // The --creator argument opens the editor once at start-up, not on every return.
     private static bool _creatorRequested;
@@ -125,7 +129,16 @@ public partial class MascotRoot : Node3D
         _director = new PerformanceDirector(_random);
         _snapshot?.Begin(_brain!, _windowSize);
         if (_snapshot != null)
+        {
             _snapshot.Act(_animator!);
+        }
+        else
+        {
+            _chat = new ChatController();
+            AddChild(_chat);
+            _chat.Attach(this);
+            DoubleClicked += _chat.OpenChat;
+        }
         SelfTest.OnSceneReady(this, "desktop");
     }
 
@@ -175,7 +188,7 @@ public partial class MascotRoot : Node3D
 
         _animator.LookYaw = 0f;
         _animator.LookPitch = 0f;
-        if (_brain.State == MascotState.Idle && _snapshot == null)
+        if (_brain.State == MascotState.Idle && _snapshot == null && !FaceUser)
             AimHeadAtCursor();
         _animator.Update(dt, _brain.State, _brain.VelocityX / _pixelsPerMetre, _dragVelocity.X / _pixelsPerMetre,
             _brain.State == MascotState.Climb ? _brain.VelocityY / _pixelsPerMetre : 0f, _brain.Running);
@@ -239,6 +252,7 @@ public partial class MascotRoot : Node3D
     public event Action? DoubleClicked;
 
     internal MascotBrain? Brain => _brain;
+    internal float CharacterHeightPixels => _heightPixels;
     internal ProceduralAnimator? Animator => _animator;
 
     /// <summary>Screen position just above the character's head (for the speech bubble).</summary>
@@ -623,6 +637,9 @@ public partial class MascotRoot : Node3D
     private void BuildMenu()
     {
         _menu.Clear();
+        _menu.AddItem(Tr("MENU_CHAT"), MenuChat);
+        _menu.AddItem(Tr("MENU_AI_SETTINGS"), MenuAiSettings);
+        _menu.AddSeparator();
         _menu.AddItem(Tr("MENU_BODY_EDITOR"), MenuCreator);
         _menu.AddSeparator();
         _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
@@ -663,6 +680,12 @@ public partial class MascotRoot : Node3D
             case MenuUseBody:
                 if (LoadBody())
                     SettingsStore.UseCharacter(CharacterSource.Body);
+                break;
+            case MenuChat:
+                _chat?.OpenChat();
+                break;
+            case MenuAiSettings:
+                _chat?.OpenSettings();
                 break;
             case MenuQuit:
                 GetTree().Quit();

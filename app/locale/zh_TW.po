@@ -26,3 +26,138 @@ msgstr "使用捏好的身體"
 
 msgid "MENU_STAY"
 msgstr "待在這裡"
+
+msgid "MENU_CHAT"
+msgstr "聊天…（或雙擊角色）"
+
+msgid "MENU_AI_SETTINGS"
+msgstr "AI 設定…"
+
+msgid "CHAT_TITLE"
+msgstr "聊天"
+
+msgid "CHAT_PROVIDER_TIP"
+msgstr "要問哪個 AI"
+
+msgid "CHAT_PLACEHOLDER"
+msgstr "想說什麼？"
+
+msgid "CHAT_SEND"
+msgstr "送出"
+
+msgid "CHAT_STOP"
+msgstr "停止"
+
+msgid "CHAT_HINT"
+msgstr "Enter 送出 · Esc 關閉 · 輸入「@名稱 問題」可指定 AI"
+
+msgid "CHAT_NO_PROVIDER"
+msgstr "（尚未設定 AI）"
+
+msgid "CHAT_DEFAULT_PROVIDER"
+msgstr "預設：{0}"
+
+msgid "CHAT_SETUP_FIRST"
+msgstr "還沒設定要連哪個 AI 喔！先在「AI 設定」裡新增一個服務吧。"
+
+msgid "CHAT_NEED_MODEL"
+msgstr "{0} 還沒選模型喔，到「AI 設定」選一個吧。"
+
+msgid "CHAT_EMPTY"
+msgstr "AI 沒有回任何內容"
+
+msgid "AI_TITLE"
+msgstr "AI 設定"
+
+msgid "AI_SERVICES"
+msgstr "AI 服務（★ 為預設）"
+
+msgid "AI_ADD"
+msgstr "新增…"
+
+msgid "AI_REMOVE"
+msgstr "刪除"
+
+msgid "AI_NAME"
+msgstr "名稱"
+
+msgid "AI_URL"
+msgstr "網址"
+
+msgid "AI_KEY"
+msgstr "API 金鑰"
+
+msgid "AI_KEY_PLACEHOLDER"
+msgstr "貼上你的 API 金鑰"
+
+msgid "AI_KEY_NOT_NEEDED"
+msgstr "本地模型不需要金鑰"
+
+msgid "AI_KEY_HELP"
+msgstr "如何取得？"
+
+msgid "AI_MODEL"
+msgstr "模型"
+
+msgid "AI_MODEL_PLACEHOLDER"
+msgstr "模型名稱，或按右邊取得清單"
+
+msgid "AI_MODEL_LIST"
+msgstr "取得清單"
+
+msgid "AI_MAKE_DEFAULT"
+msgstr "設為預設"
+
+msgid "AI_TEST"
+msgstr "測試連線"
+
+msgid "AI_CHARACTER_NAME"
+msgstr "角色名字"
+
+msgid "AI_PERSONALITY"
+msgstr "個性"
+
+msgid "AI_NOTE"
+msgstr "金鑰只會加密存在這台電腦上。使用費用由各 AI 服務直接向你收取；本地模型（Ollama、LM Studio）免費但需要先安裝。"
+
+msgid "AI_SAVE"
+msgstr "儲存並關閉"
+
+msgid "AI_START_HINT"
+msgstr "按「新增…」選一個 AI 服務，貼上金鑰、選好模型，再按「測試連線」。"
+
+msgid "AI_LOADING_MODELS"
+msgstr "正在取得模型清單…"
+
+msgid "AI_NO_MODELS"
+msgstr "沒有取得任何模型，請直接輸入模型名稱。"
+
+msgid "AI_MODELS_FOUND"
+msgstr "找到 {0} 個模型，請選一個。"
+
+msgid "AI_NEED_MODEL"
+msgstr "請先填寫或選擇模型。"
+
+msgid "AI_TESTING"
+msgstr "測試中…"
+
+msgid "AI_TEST_OK"
+msgstr "連線成功！回覆：{0}"
+
+msgid "ERR_KEY"
+msgstr "金鑰好像不對，或沒有權限使用這個模型耶…（{0}）"
+
+msgid "ERR_RATE"
+msgstr "問太快了，或額度用完了，等一下再問我好嗎？（{0}）"
+
+msgid "ERR_SERVER"
+msgstr "AI 服務那邊出了點問題，等一下再試試看。（{0}）"
+
+msgid "ERR_NETWORK"
+msgstr "連不上 AI 服務耶，網路或網址有問題嗎？（{0}）"
+
+msgid "ERR_REFUSED"
+msgstr "這個問題我沒辦法回答耶。"
+
+msgid "ERR_OTHER"
+msgstr "出了點問題：{0}"
