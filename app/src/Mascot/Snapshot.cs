@@ -1,4 +1,5 @@
 using System;
+using DigitalDoll.Core.Body;
 using DigitalDoll.Core.Mascot;
 using Godot;
 
@@ -21,6 +22,9 @@ internal sealed class Snapshot
     public float? Yaw { get; private set; }
     public string? CharacterPath { get; private set; }
 
+    /// <summary>Set by <c>--body</c>: show an edited body (adjusted with <c>--set key=value</c>).</summary>
+    public BodyShape? Body { get; private set; }
+
     public static Snapshot? FromCommandLine(string[] args)
     {
         int index = Array.IndexOf(args, "--snapshot");
@@ -28,6 +32,8 @@ internal sealed class Snapshot
             return null;
 
         var snapshot = new Snapshot { _output = args[index + 1] };
+        if (Array.IndexOf(args, "--body") >= 0)
+            snapshot.Body = new BodyShape();
         for (int i = 0; i + 1 < args.Length; i++)
         {
             string value = args[i + 1];
@@ -48,6 +54,11 @@ internal sealed class Snapshot
                     break;
                 case "--character":
                     snapshot.CharacterPath = value;
+                    break;
+                case "--set":
+                    var kv = value.Split('=');
+                    snapshot.Body ??= new BodyShape();
+                    snapshot.Body.Set(kv[0], float.Parse(kv[1], System.Globalization.CultureInfo.InvariantCulture));
                     break;
             }
         }

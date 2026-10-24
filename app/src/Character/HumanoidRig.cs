@@ -49,6 +49,10 @@ public sealed class HumanoidRig
                 _hipsParentRestInverse = skeleton.GetBoneGlobalRest(parent).Basis.Inverse();
         }
 
+        // T-pose models hold the arms level; A-pose models (MakeHuman) already lower them.
+        var arm = BoneRestPosition("LeftLowerArm") - BoneRestPosition("LeftUpperArm");
+        ArmDroop = arm.LengthSquared() > 1e-8f ? Mathf.Atan2(-arm.Y, new Vector2(arm.X, arm.Z).Length()) : 0f;
+
         float footY = Mathf.Min(BoneRestPosition("LeftFoot").Y, BoneRestPosition("RightFoot").Y);
         float headY = BoneRestPosition("Head").Y;
         // The head bone sits around the jaw; the crown is roughly 0.2 m above it on an adult.
@@ -65,6 +69,9 @@ public sealed class HumanoidRig
 
     /// <summary>Approximate standing height in skeleton units (metres for VRM).</summary>
     public float Height { get; }
+
+    /// <summary>How far the rest pose's upper arms already point below horizontal (radians).</summary>
+    public float ArmDroop { get; }
 
     /// <summary>Rest height of the ankle above the skeleton origin.</summary>
     public float FootHeight { get; }

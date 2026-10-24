@@ -20,3 +20,6 @@ msgstr "選擇 VRM 角色檔"
 
 msgid "MENU_BODY_EDITOR"
 msgstr "捏身材…"
+
+msgid "MENU_USE_BODY"
+msgstr "使用捏好的身體"

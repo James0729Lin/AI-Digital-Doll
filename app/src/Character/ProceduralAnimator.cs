@@ -75,8 +75,8 @@ public sealed class ProceduralAnimator
 
     private void PoseBase()
     {
-        // Lower the arms out of the T-pose; dragging and falling raise them again.
-        float lower = ArmsDown * (1f - 0.35f * _drag - 1.6f * _fall);
+        // Lower the arms from the rest pose (T or A); dragging and falling raise them again.
+        float lower = ArmsDown * (1f - 0.35f * _drag - 1.6f * _fall) - _rig.ArmDroop;
         var f = _rig.Forward;
         _rig.Rotate("LeftUpperArm", f, -lower);
         _rig.Rotate("RightUpperArm", f, lower);

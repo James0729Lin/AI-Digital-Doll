@@ -75,6 +75,25 @@ public sealed class MorphEngine
         return (bottom, top);
     }
 
+    /// <summary>Joint position of every bone (x, y, z interleaved, in <see cref="BodyPack.Bones"/> order).</summary>
+    public float[] BoneHeads(float[] positions)
+    {
+        var heads = new float[_pack.Bones.Count * 3];
+        for (int b = 0; b < _pack.Bones.Count; b++)
+        {
+            var vertices = _pack.Bones[b].HeadVertices;
+            foreach (int v in vertices)
+            {
+                heads[b * 3] += positions[v * 3];
+                heads[b * 3 + 1] += positions[v * 3 + 1];
+                heads[b * 3 + 2] += positions[v * 3 + 2];
+            }
+            for (int axis = 0; axis < 3; axis++)
+                heads[b * 3 + axis] /= vertices.Length;
+        }
+        return heads;
+    }
+
     /// <summary>Centre of a joint helper group (for example "pelvis" or "l-knee").</summary>
     public (float X, float Y, float Z) JointCentre(string joint, float[] positions)
     {

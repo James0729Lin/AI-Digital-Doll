@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using DigitalDoll.Core;
 using DigitalDoll.Core.Body;
 using Xunit;
 
@@ -38,6 +39,72 @@ public class BodyTests : IClassFixture<BodyPackFixture>
         Assert.DoesNotContain(_f.Pack.Targets.Keys, t => t.Contains("genitals") || t.Contains("bulge")
             || (t.Contains("nipple") && t != MorphWeights.FabricSmoothing));
         Assert.DoesNotContain(BodyCatalog.Sliders, d => d.Id.Contains("nipple") || (d.Positive ?? "").Contains("nipple"));
+    }
+
+    [Fact]
+    public void SkeletonIsAHumanoidWithParentsFirst()
+    {
+        var names = _f.Pack.Bones.Select(b => b.Name).ToList();
+        foreach (var bone in new[] { "Hips", "Spine", "Chest", "UpperChest", "Neck", "Head",
+                     "LeftUpperArm", "RightLowerArm", "LeftHand", "LeftUpperLeg", "RightLowerLeg", "LeftFoot" })
+            Assert.Contains(bone, names);
+        for (int i = 0; i < _f.Pack.Bones.Count; i++)
+            Assert.True(_f.Pack.Bones[i].Parent < i);
+        Assert.Equal(-1, _f.Pack.Bones[0].Parent);
+    }
+
+    [Fact]
+    public void JointsFollowTheBodyShape()
+    {
+        var names = _f.Pack.Bones.Select(b => b.Name).ToList();
+        float Y(float[] heads, string bone) => heads[names.IndexOf(bone) * 3 + 1];
+        float X(float[] heads, string bone) => heads[names.IndexOf(bone) * 3];
+
+        var normal = _f.Engine.BoneHeads(_f.Engine.Apply(new BodyShape()));
+        Assert.True(Y(normal, "Head") > Y(normal, "Neck"));
+        Assert.True(Y(normal, "Neck") > Y(normal, "Hips"));
+        Assert.True(Y(normal, "Hips") > Y(normal, "LeftLowerLeg"));
+        Assert.True(Y(normal, "LeftLowerLeg") > Y(normal, "LeftFoot"));
+        Assert.True(X(normal, "LeftUpperArm") > 0f && X(normal, "RightUpperArm") < 0f);
+
+        var tallShape = new BodyShape();
+        tallShape.Set("height", 1f);
+        var tall = _f.Engine.BoneHeads(_f.Engine.Apply(tallShape));
+        Assert.True(Y(tall, "Head") - Y(tall, "LeftFoot") > Y(normal, "Head") - Y(normal, "LeftFoot") + 0.05f);
+    }
+
+    [Fact]
+    public void EveryDrawnVertexIsSkinned()
+    {
+        var w = _f.Pack.BoneWeights;
+        var idx = _f.Pack.BoneIndices;
+        foreach (var surface in _f.Pack.Surfaces.Values)
+        {
+            foreach (int v in surface.Distinct())
+            {
+                Assert.Equal(255, w[v * 4] + w[v * 4 + 1] + w[v * 4 + 2] + w[v * 4 + 3]);
+                for (int k = 0; k < 4; k++)
+                    Assert.InRange(idx[v * 4 + k], 0, _f.Pack.Bones.Count - 1);
+            }
+        }
+    }
+
+    [Fact]
+    public void HandAndFootVerticesFollowTheirBones()
+    {
+        var names = _f.Pack.Bones.Select(b => b.Name).ToList();
+        int Dominant(int v) => _f.Pack.BoneIndices[v * 4];
+        int handBone = names.IndexOf("LeftHand"), footBone = names.IndexOf("LeftFoot"), headBone = names.IndexOf("Head");
+        var p = _f.Pack.BasePositions;
+        int Nearest(string group)
+        {
+            var (x, y, z) = _f.Engine.JointCentre(group, p);
+            return _f.Pack.Surfaces["body"].Distinct().OrderBy(v =>
+                (p[v * 3] - x) * (p[v * 3] - x) + (p[v * 3 + 1] - y) * (p[v * 3 + 1] - y) + (p[v * 3 + 2] - z) * (p[v * 3 + 2] - z)).First();
+        }
+        Assert.Equal(handBone, Dominant(Nearest("l-finger-3-3")));
+        Assert.Equal(footBone, Dominant(Nearest("l-toe-3-2")));
+        Assert.Equal(headBone, Dominant(Nearest("head-2")));
     }
 
     [Fact]
@@ -254,5 +321,26 @@ public class BodyShapeTests
         copy.Set("weight", 1f);
         Assert.False(copy.SameAs(shape));
         Assert.Equal(0.5f, shape.Get("weight"));
+    }
+}
+
+public class AppSettingsTests
+{
+    [Fact]
+    public void RoundTripsTheCharacterChoice()
+    {
+        var settings = new AppSettings { Character = CharacterSource.Body };
+        Assert.Contains("\"body\"", settings.ToJson());
+        Assert.Equal(CharacterSource.Body, AppSettings.FromJson(settings.ToJson()).Character);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not json")]
+    [InlineData("{\"character\":\"robot\"}")]
+    public void BrokenFilesGiveDefaults(string? json)
+    {
+        Assert.Equal(CharacterSource.Default, AppSettings.FromJson(json).Character);
     }
 }

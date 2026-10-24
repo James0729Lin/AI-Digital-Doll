@@ -24,7 +24,7 @@ float inside(float value, float low, float high, float soft) {
 }
 
 void fragment() {
-	float soft = max(fwidth(rest.y) + fwidth(rest.x), 0.0003);
+	float soft = max(0.5 * (fwidth(rest.y) + fwidth(rest.x)), 0.0003);
 	float x = abs(rest.x);
 	float top = inside(rest.y, top_low, top_high, soft) * (1.0 - smoothstep(top_half_width - soft, top_half_width + soft, x));
 	float shorts = inside(rest.y, shorts_low, shorts_high, soft) * (1.0 - smoothstep(shorts_half_width - soft, shorts_half_width + soft, x));

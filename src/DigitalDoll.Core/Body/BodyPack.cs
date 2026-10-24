@@ -23,20 +23,26 @@ public sealed class MorphTarget
     public float[] Deltas { get; }
 }
 
+/// <summary>A humanoid bone; its joint is the centre of <see cref="HeadVertices"/> on the morphed mesh.</summary>
+public sealed record BodyBone(string Name, int Parent, int[] HeadVertices);
+
 /// <summary>
 /// Base mesh and morph targets converted from the MakeHuman CC0 assets by
 /// <c>tools/makehuman/convert.py</c> (see that file for the binary layout).
 /// </summary>
 public sealed class BodyPack
 {
-    private const uint Version = 1;
+    private const uint Version = 2;
 
-    private BodyPack(float[] positions, Dictionary<string, int[]> surfaces,
-        Dictionary<string, int[]> groups, Dictionary<string, MorphTarget> targets)
+    private BodyPack(float[] positions, Dictionary<string, int[]> surfaces, Dictionary<string, int[]> groups,
+        BodyBone[] bones, byte[] boneIndices, byte[] boneWeights, Dictionary<string, MorphTarget> targets)
     {
         BasePositions = positions;
         Surfaces = surfaces;
         Groups = groups;
+        Bones = bones;
+        BoneIndices = boneIndices;
+        BoneWeights = boneWeights;
         Targets = targets;
     }
 
@@ -50,6 +56,15 @@ public sealed class BodyPack
 
     /// <summary>Vertex groups marking joint centres (pelvis, l-knee…).</summary>
     public IReadOnlyDictionary<string, int[]> Groups { get; }
+
+    /// <summary>Humanoid skeleton (VRM bone names), parents before children.</summary>
+    public IReadOnlyList<BodyBone> Bones { get; }
+
+    /// <summary>Four bone indices per vertex.</summary>
+    public byte[] BoneIndices { get; }
+
+    /// <summary>Four skin weights per vertex in 1/255 steps; each vertex sums to 255.</summary>
+    public byte[] BoneWeights { get; }
 
     public IReadOnlyDictionary<string, MorphTarget> Targets { get; }
 
@@ -84,6 +99,16 @@ public sealed class BodyPack
             groups[name] = ReadIndices(reader, (int)reader.ReadUInt32());
         }
 
+        var bones = new BodyBone[reader.ReadUInt32()];
+        for (int i = 0; i < bones.Length; i++)
+        {
+            string name = ReadString(reader);
+            int parent = reader.ReadInt32();
+            bones[i] = new BodyBone(name, parent, ReadIndices(reader, (int)reader.ReadUInt32()));
+        }
+        var boneIndices = reader.ReadBytes(vertexCount * 4);
+        var boneWeights = reader.ReadBytes(vertexCount * 4);
+
         var targets = new Dictionary<string, MorphTarget>();
         for (uint i = reader.ReadUInt32(); i > 0; i--)
         {
@@ -106,7 +131,7 @@ public sealed class BodyPack
             targets[name] = new MorphTarget(name, indices, deltas);
         }
 
-        return new BodyPack(positions, surfaces, groups, targets);
+        return new BodyPack(positions, surfaces, groups, bones, boneIndices, boneWeights, targets);
     }
 
     private static float[] ReadFloats(BinaryReader reader, int count)

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using DigitalDoll.Body;
+using DigitalDoll.Core;
 using DigitalDoll.Core.Body;
 using Godot;
 
@@ -77,10 +78,7 @@ public partial class CreatorRoot : Control
     public override void _Notification(int what)
     {
         if (what == NotificationWMCloseRequest)
-        {
-            Save();
-            AppWindow.OpenMascot(this);
-        }
+            BackToDesktop();
     }
 
     public override void _Process(double delta)
@@ -239,6 +237,15 @@ public partial class CreatorRoot : Control
         }
     }
 
+    /// <summary>Saves and shows this body on the desktop.</summary>
+    private void BackToDesktop()
+    {
+        Save();
+        if (_snapshot == null)
+            SettingsStore.UseCharacter(CharacterSource.Body);
+        AppWindow.OpenMascot(this);
+    }
+
     private void Save()
     {
         if (_snapshot != null || SelfTest.Enabled)
@@ -377,11 +384,7 @@ public partial class CreatorRoot : Control
 
         var file = new HBoxContainer();
         AddButton(file, Text("儲存", "Save"), Save);
-        AddButton(file, Text("回到桌面", "Back to desktop"), () =>
-        {
-            Save();
-            AppWindow.OpenMascot(this);
-        });
+        AddButton(file, Text("回到桌面", "Back to desktop"), BackToDesktop);
         _status = new Label { SizeFlagsHorizontal = SizeFlags.ExpandFill, HorizontalAlignment = HorizontalAlignment.Right };
         file.AddChild(_status);
         column.AddChild(file);

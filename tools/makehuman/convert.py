@@ -6,10 +6,12 @@ no MakeHuman program code is used. Usage:
     python3 tools/makehuman/convert.py <makehuman>/makehuman/data app/assets/body/body.ddbp.gz
 
 Pack layout (little endian, gzip compressed):
-    "DDBP" u32 version
+    "DDBP" u32 version (2)
     u32 vertexCount, f32[3 * vertexCount] base positions in metres
     u32 surfaceCount, { str name, u32 indexCount, u32[indexCount] triangle indices }  (body, eyes)
     u32 groupCount,   { str name, u32 count, u32[count] vertex indices }   (joint helpers)
+    u32 boneCount,    { str name, i32 parent, u32 count, u32[count] head vertices }
+    u8[4 * vertexCount] bone indices, u8[4 * vertexCount] weights (/255, sum 255)
     u32 targetCount,  { str name, u32 count, f32 scale, u16[count] index steps,
                         i16[count] dx, i16[count] dy, i16[count] dz }
         Indices are sorted and stored as differences from the previous index;
@@ -23,6 +25,8 @@ import os
 import re
 import struct
 import sys
+
+import json
 
 import numpy as np
 
@@ -50,6 +54,73 @@ REGION_TARGETS = [
     # Always applied (not a slider): smooths the chest under the fitted top.
     r"breast/nipple-point-decr",
 ]
+
+
+# Humanoid bones (VRM / Godot humanoid names) built from the MakeHuman default
+# skeleton: name, MakeHuman bone whose head is the joint, parent. Every other
+# MakeHuman bone gives its skin weights to the nearest listed ancestor or alias.
+HUMANOID = [
+    ("Hips", "root", None),
+    ("Spine", "spine05", "Hips"),
+    ("Chest", "spine03", "Spine"),
+    ("UpperChest", "spine01", "Chest"),
+    ("Neck", "neck01", "UpperChest"),
+    ("Head", "head", "Neck"),
+]
+for side, mh in (("Left", "L"), ("Right", "R")):
+    HUMANOID += [
+        (f"{side}Shoulder", f"clavicle.{mh}", "UpperChest"),
+        (f"{side}UpperArm", f"upperarm01.{mh}", f"{side}Shoulder"),
+        (f"{side}LowerArm", f"lowerarm01.{mh}", f"{side}UpperArm"),
+        (f"{side}Hand", f"wrist.{mh}", f"{side}LowerArm"),
+        (f"{side}UpperLeg", f"upperleg01.{mh}", "Hips"),
+        (f"{side}LowerLeg", f"lowerleg01.{mh}", f"{side}UpperLeg"),
+        (f"{side}Foot", f"foot.{mh}", f"{side}LowerLeg"),
+    ]
+
+# Bones whose weights belong to a humanoid bone other than their nearest ancestor.
+WEIGHT_ALIASES = {f"shoulder01.{mh}": f"{side}UpperArm" for side, mh in (("Left", "L"), ("Right", "R"))}
+
+
+def build_rig(rig_dir, vertex_count):
+    skeleton = json.load(open(os.path.join(rig_dir, "default.mhskel")))
+    weights = json.load(open(os.path.join(rig_dir, "default_weights.mhw")))["weights"]
+    bones, joints = skeleton["bones"], skeleton["joints"]
+
+    names = [h[0] for h in HUMANOID]
+    by_mh = {mh: i for i, (_, mh, _) in enumerate(HUMANOID)}
+
+    def humanoid_for(mh_bone):
+        if mh_bone in WEIGHT_ALIASES:
+            return names.index(WEIGHT_ALIASES[mh_bone])
+        while mh_bone is not None:
+            if mh_bone in by_mh:
+                return by_mh[mh_bone]
+            mh_bone = bones[mh_bone]["parent"]
+        return 0
+
+    accumulated = np.zeros((vertex_count, len(HUMANOID)))
+    for mh_bone, entries in weights.items():
+        target = humanoid_for(mh_bone)
+        for vertex, weight in entries:
+            accumulated[vertex, target] += weight
+
+    # Keep the four strongest influences per vertex, quantised to bytes summing to 255.
+    order = np.argsort(-accumulated, axis=1)[:, :4]
+    top = np.take_along_axis(accumulated, order, axis=1)
+    total = top.sum(axis=1, keepdims=True)
+    unweighted = total[:, 0] <= 0
+    top = np.where(total > 0, top / np.where(total > 0, total, 1), 0)
+    top[unweighted, 0] = 1.0
+    order[unweighted, 0] = 0
+    quantised = np.floor(top * 255).astype(np.int32)
+    quantised[:, 0] += 255 - quantised.sum(axis=1)
+
+    rig_bones = []
+    for name, mh_bone, parent in HUMANOID:
+        head = joints[bones[mh_bone]["head"]]
+        rig_bones.append((name, names.index(parent) if parent else -1, head))
+    return rig_bones, order.astype(np.uint8), quantised.astype(np.uint8)
 
 
 def macro_targets():
@@ -147,7 +218,7 @@ def main():
     groups = [(g[len("joint-"):], sorted({i for f in fs for i in f})) for g, fs in faces.items() if g.startswith("joint-")]
 
     out = bytearray(b"DDBP")
-    out += struct.pack("<I", 1)
+    out += struct.pack("<I", 2)
 
     def string(s):
         data = s.encode("utf-8")
@@ -162,6 +233,15 @@ def main():
     out += struct.pack("<I", len(groups))
     for name, idx in groups:
         out += string(name) + struct.pack("<I", len(idx)) + np.array(idx, dtype="<u4").tobytes()
+    rig_bones, bone_index, bone_weight = build_rig(os.path.join(args.data, "rigs"), len(positions))
+    left_arm = positions[rig_bones[[b[0] for b in rig_bones].index("LeftUpperArm")][2]].mean(axis=0)
+    if left_arm[0] <= 0:
+        sys.exit("expected MakeHuman .L bones on +X (the character's left)")
+    out += struct.pack("<I", len(rig_bones))
+    for name, parent, head in rig_bones:
+        out += string(name) + struct.pack("<iI", parent, len(head)) + np.array(head, dtype="<u4").tobytes()
+    out += bone_index.tobytes() + bone_weight.tobytes()
+
     out += struct.pack("<I", len(targets))
     for name in target_names:
         idx, d = targets[name]
@@ -176,7 +256,7 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     with gzip.open(args.output, "wb", compresslevel=9) as f:
         f.write(bytes(out))
-    print(f"{len(positions)} vertices, {len(targets)} targets, "
+    print(f"{len(positions)} vertices, {len(rig_bones)} bones, {len(targets)} targets, "
           f"{len(out) / 1e6:.1f} MB raw -> {os.path.getsize(args.output) / 1e6:.1f} MB")
 
 

@@ -20,3 +20,6 @@ msgstr "Choose a VRM character file"
 
 msgid "MENU_BODY_EDITOR"
 msgstr "Body editor…"
+
+msgid "MENU_USE_BODY"
+msgstr "Use my edited body"

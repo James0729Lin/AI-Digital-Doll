@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DigitalDoll.Body;
 using DigitalDoll.Character;
+using DigitalDoll.Core;
+using DigitalDoll.Core.Body;
 using DigitalDoll.Core.Geometry;
 using DigitalDoll.Core.Mascot;
+using DigitalDoll.Creator;
 using DigitalDoll.Platform;
 using Godot;
 using NVector2 = System.Numerics.Vector2;
@@ -27,6 +31,7 @@ public partial class MascotRoot : Node3D
     private const int MenuReset = 2;
     private const int MenuQuit = 3;
     private const int MenuCreator = 4;
+    private const int MenuUseBody = 5;
 
     private Camera3D _camera = null!;
     private Node3D _pivot = null!;
@@ -93,9 +98,7 @@ public partial class MascotRoot : Node3D
                 LoadCharacter(vrm, persist: true);
         };
 
-        string start = _snapshot?.CharacterPath
-            ?? (FileAccess.FileExists(SavedCharacter) ? SavedCharacter : DefaultCharacter);
-        if (!LoadCharacter(start, persist: false) && start != DefaultCharacter)
+        if (!LoadStartCharacter())
             LoadCharacter(DefaultCharacter, persist: false);
 
         _snapshot?.Begin(_brain!, _windowSize);
@@ -216,17 +219,61 @@ public partial class MascotRoot : Node3D
         _camera.Position = new Vector3(0f, 0f, 10f);
     }
 
+    private bool LoadStartCharacter()
+    {
+        if (_snapshot != null)
+        {
+            return _snapshot.Body != null
+                ? AttachCharacter(BodyCharacter.Create(_snapshot.Body), "body (snapshot)")
+                : LoadCharacter(_snapshot.CharacterPath ?? DefaultCharacter, persist: false);
+        }
+
+        var settings = SettingsStore.Load();
+        return settings.Character switch
+        {
+            CharacterSource.Body => LoadBody(),
+            CharacterSource.Vrm => FileAccess.FileExists(SavedCharacter) && LoadCharacter(SavedCharacter, persist: false),
+            _ => LoadCharacter(DefaultCharacter, persist: false),
+        };
+    }
+
     private bool LoadCharacter(string path, bool persist)
     {
         var model = VrmLoader.Load(path);
-        if (model == null)
+        if (model == null || !AttachCharacter(model, path))
             return false;
+        if (persist)
+        {
+            SaveCharacter(path);
+            SettingsStore.UseCharacter(CharacterSource.Vrm);
+        }
+        return true;
+    }
 
+    /// <summary>Shows the body made in the body editor, rigged for the desktop.</summary>
+    private bool LoadBody()
+    {
+        if (!FileAccess.FileExists(CreatorRoot.SavePath))
+            return false;
+        try
+        {
+            var shape = BodyShape.FromJson(FileAccess.GetFileAsString(CreatorRoot.SavePath));
+            return AttachCharacter(BodyCharacter.Create(shape), CreatorRoot.SavePath);
+        }
+        catch (Exception e)
+        {
+            GD.PushError($"Could not load the edited body: {e.Message}");
+            return false;
+        }
+    }
+
+    private bool AttachCharacter(Node3D model, string label)
+    {
         _pivot.AddChild(model);
         var rig = HumanoidRig.Create(model);
         if (rig == null)
         {
-            GD.PushError($"{path} has no humanoid skeleton");
+            GD.PushError($"{label} has no humanoid skeleton");
             model.QueueFree();
             return false;
         }
@@ -236,7 +283,7 @@ public partial class MascotRoot : Node3D
         _rig = rig;
         var expressions = ExpressionRig.Create(model);
         _animator = new ProceduralAnimator(rig, expressions, _random);
-        GD.Print($"Loaded {path}: expressions [{string.Join(", ", expressions.Names)}]");
+        GD.Print($"Loaded {label}: expressions [{string.Join(", ", expressions.Names)}]");
 
         // Turn the model so that its forward axis matches the pivot's +Z (toward the camera).
         var forward = model.GlobalBasis.Inverse() * (rig.Skeleton.GlobalBasis * rig.Forward);
@@ -247,9 +294,6 @@ public partial class MascotRoot : Node3D
         if (_brain == null)
             _brain = new MascotBrain(new MascotTuning { WalkSpeed = 0.55f * _pixelsPerMetre }, _random,
                 _windowSize.X * 0.7f, GroundForWindow());
-
-        if (persist)
-            SaveCharacter(path);
         return true;
     }
 
@@ -374,11 +418,14 @@ public partial class MascotRoot : Node3D
         _menu.AddItem(Tr("MENU_BODY_EDITOR"), MenuCreator);
         _menu.AddSeparator();
         _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
+        _menu.AddItem(Tr("MENU_USE_BODY"), MenuUseBody);
         _menu.AddItem(Tr("MENU_LOAD_CHARACTER"), MenuLoad);
         _menu.AddItem(Tr("MENU_DEFAULT_CHARACTER"), MenuReset);
         _menu.AddSeparator();
         _menu.AddItem(Tr("MENU_QUIT"), MenuQuit);
         _menu.IdPressed += OnMenu;
+        _menu.AboutToPopup += () =>
+            _menu.SetItemDisabled(_menu.GetItemIndex(MenuUseBody), !FileAccess.FileExists(CreatorRoot.SavePath));
 
         _fileDialog.Title = Tr("DIALOG_OPEN_CHARACTER");
         _fileDialog.Filters = new[] { "*.vrm ; VRM" };
@@ -401,8 +448,12 @@ public partial class MascotRoot : Node3D
                 _fileDialog.Popup();
                 break;
             case MenuReset:
-                DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(SavedCharacter));
-                LoadCharacter(DefaultCharacter, persist: false);
+                if (LoadCharacter(DefaultCharacter, persist: false))
+                    SettingsStore.UseCharacter(CharacterSource.Default);
+                break;
+            case MenuUseBody:
+                if (LoadBody())
+                    SettingsStore.UseCharacter(CharacterSource.Body);
                 break;
             case MenuQuit:
                 GetTree().Quit();
