@@ -17,6 +17,15 @@ public enum MascotState
 
     /// <summary>A hard landing after a long fall: on its bottom for a moment, then up again.</summary>
     Tumble,
+
+    /// <summary>Lying down for a rest (dozing off) on the surface it stands on.</summary>
+    Lie,
+
+    /// <summary>Flat on its face after a very long fall.</summary>
+    Sprawl,
+
+    /// <summary>Getting back on its feet after lying or sprawling.</summary>
+    GetUp,
 }
 
 public sealed class MascotTuning
@@ -32,6 +41,13 @@ public sealed class MascotTuning
     public float EdgeMargin { get; init; } = 60f;
     public float LandingSeconds { get; init; } = 0.45f;
     public float TumbleSeconds { get; init; } = 2.2f;
+    public float SprawlSeconds { get; init; } = 3f;
+    public float GetUpSeconds { get; init; } = 1.1f;
+    public float MinLieSeconds { get; init; } = 14f;
+    public float MaxLieSeconds { get; init; } = 35f;
+
+    /// <summary>Walking speed multiplier when running off.</summary>
+    public float RunFactor { get; init; } = 2.4f;
     public float ArriveTolerance { get; init; } = 2f;
 
     /// <summary>Character height in pixels; reach, jump range and wall offset scale with it.</summary>
@@ -62,6 +78,7 @@ public sealed class MascotBrain
         Sit,
         JumpToWall,
         ClimbDown,
+        Lie,
     }
 
     private readonly MascotTuning _tuning;
@@ -79,6 +96,8 @@ public sealed class MascotBrain
     private long? _wallId;
     private float _jumpTime, _jumpDuration;
     private float _jumpStartX, _jumpStartY;
+    private float _hold;
+    private (float X, bool Run)? _afterGetUp;
 
     public MascotBrain(MascotTuning tuning, Random random, float startX, Surroundings surroundings)
     {
@@ -125,6 +144,12 @@ public sealed class MascotBrain
     public float StateTime => _stateTime;
 
     public bool OnFloor => PlatformId == Surroundings.FloorId;
+
+    /// <summary>True while running off (walking at <see cref="MascotTuning.RunFactor"/> times the speed).</summary>
+    public bool Running { get; private set; }
+
+    /// <summary>Seconds left during which the mascot stays where it is (see <see cref="Hold"/>).</summary>
+    public float HoldTime => _hold;
 
     public event Action<MascotState, MascotState>? StateChanged;
 
@@ -187,16 +212,29 @@ public sealed class MascotBrain
         if (dt <= 0f)
             return;
         _stateTime += dt;
+        _hold = MathF.Max(0f, _hold - dt);
 
         switch (State)
         {
             case MascotState.Idle:
-                if (_stateTime >= _waitDuration)
+                if (_stateTime >= _waitDuration && _hold <= 0f)
                     DecideOnPlatform();
                 break;
             case MascotState.Sit:
-                if (_stateTime >= _waitDuration)
+                if (_stateTime >= _waitDuration && _hold <= 0f)
                     EnterIdle(shortWait: true);
+                break;
+            case MascotState.Lie:
+                if (_stateTime >= _waitDuration)
+                    SetState(MascotState.GetUp);
+                break;
+            case MascotState.Sprawl:
+                if (_stateTime >= _tuning.SprawlSeconds)
+                    SetState(MascotState.GetUp);
+                break;
+            case MascotState.GetUp:
+                if (_stateTime >= _tuning.GetUpSeconds)
+                    FinishGettingUp();
                 break;
             case MascotState.Walk:
                 UpdateWalk(dt);
@@ -205,7 +243,7 @@ public sealed class MascotBrain
                 UpdateClimb(dt);
                 break;
             case MascotState.Cling:
-                if (_stateTime >= _waitDuration)
+                if (_stateTime >= _waitDuration && _hold <= 0f)
                     DecideOnWall();
                 break;
             case MascotState.Jump:
@@ -234,8 +272,83 @@ public sealed class MascotBrain
             return;
         if (State is MascotState.Dragged or MascotState.Falling or MascotState.Jump)
             return;
+        if (GettingUpFirst(x, run: false))
+            return;
         _plan = Plan.None;
+        _hold = 0f;
         EnterWalk(ClampOn(platform, x));
+    }
+
+    /// <summary>Lies down where the mascot stands (if there is room).</summary>
+    public void LieDown()
+    {
+        if (PlatformId is not long id || Surroundings.FindPlatform(id) is not Platform platform)
+            return;
+        if (State is not (MascotState.Idle or MascotState.Walk or MascotState.Sit or MascotState.Landing))
+            return;
+        _plan = Plan.Lie;
+        EnterWalk(LieSpot(platform, X));
+    }
+
+    /// <summary>Wakes a lying mascot (it gets up); does nothing otherwise.</summary>
+    public void Wake()
+    {
+        if (State == MascotState.Lie)
+            SetState(MascotState.GetUp);
+    }
+
+    /// <summary>
+    /// Keeps the mascot where it is for a while (while it talks or reacts): it stops
+    /// walking, keeps sitting or holding on, and a lying mascot gets up.
+    /// </summary>
+    public void Hold(float seconds)
+    {
+        _hold = MathF.Max(_hold, seconds);
+        switch (State)
+        {
+            case MascotState.Walk:
+                _plan = Plan.None;
+                EnterIdle(shortWait: true);
+                break;
+            case MascotState.Climb when _wallId is long id && Surroundings.FindWall(id) is Wall wall:
+                StartCling(wall, Y);
+                break;
+            case MascotState.Lie:
+                SetState(MascotState.GetUp);
+                break;
+        }
+    }
+
+    /// <summary>Runs off, away from a point (the cursor): along its surface, or up or down its wall.</summary>
+    public void Flee(float fromX, float fromY)
+    {
+        _hold = 0f;
+        if (State is MascotState.Climb or MascotState.Cling && _wallId is long wallId && Surroundings.FindWall(wallId) is Wall wall)
+        {
+            float away = fromY < Y ? 1f : -1f;
+            float target = Y + away * _tuning.Height * 1.2f;
+            if (target < wall.Top || target > wall.Bottom)
+                target = Y - away * _tuning.Height * 1.2f;
+            StartClimb(wall, target);
+            return;
+        }
+        if (PlatformId is not long id || Surroundings.FindPlatform(id) is not Platform platform)
+            return;
+        if (State is MascotState.Dragged or MascotState.Falling or MascotState.Jump)
+            return;
+
+        float distance = _tuning.Height * Lerp(1.5f, 2.5f, (float)_random.NextDouble());
+        int side = fromX < X ? 1 : fromX > X ? -1 : (_random.Next(2) == 0 ? -1 : 1);
+        float room = side > 0 ? platform.X1 - X : X - platform.X0;
+        // Not much room on that side: dodge past the cursor to the other.
+        if (room < _tuning.Height * 0.6f)
+            side = -side;
+        float targetX = ClampOn(platform, X + side * distance);
+        if (GettingUpFirst(targetX, run: true))
+            return;
+        _plan = Plan.None;
+        EnterWalk(targetX);
+        Running = State == MascotState.Walk;
     }
 
     /// <summary>Climbs to <paramref name="y"/> on the wall the mascot is holding on to.</summary>
@@ -317,6 +430,8 @@ public sealed class MascotBrain
         {
             (3f, () => EnterWalk(PickWalkTarget(here))),
         };
+        if (here.Width >= _tuning.Height * 1.3f)
+            options.Add((Staying ? 0.6f : 0.45f, () => { _plan = Plan.Lie; EnterWalk(LieSpot(here, PickWalkTarget(here, nearby: true))); }));
         if (Staying)
         {
             options.Add((2f, () => EnterIdle()));
@@ -475,7 +590,8 @@ public sealed class MascotBrain
     private void UpdateWalk(float dt)
     {
         float delta = TargetX - X;
-        float step = _tuning.WalkSpeed * dt;
+        float speed = _tuning.WalkSpeed * (Running ? _tuning.RunFactor : 1f);
+        float step = speed * dt;
         if (MathF.Abs(delta) <= MathF.Max(step, _tuning.ArriveTolerance))
         {
             X = TargetX;
@@ -483,7 +599,7 @@ public sealed class MascotBrain
             return;
         }
         Facing = delta > 0 ? 1 : -1;
-        VelocityX = Facing * _tuning.WalkSpeed;
+        VelocityX = Facing * speed;
         X += Facing * step;
 
         // Walking off the end of a window top.
@@ -518,6 +634,11 @@ public sealed class MascotBrain
                 break;
             case Plan.ClimbDown:
                 StartClimb(_planWall, PickWallTarget(_planWall, below: _planWall.Top + _tuning.Height * 0.3f));
+                break;
+            case Plan.Lie:
+                VelocityX = 0f;
+                _waitDuration = Lerp(_tuning.MinLieSeconds, _tuning.MaxLieSeconds, (float)_random.NextDouble());
+                SetState(MascotState.Lie);
                 break;
             default:
                 EnterIdle();
@@ -692,13 +813,17 @@ public sealed class MascotBrain
 
     private void Land(Platform platform)
     {
-        bool hard = State == MascotState.Falling && Y - _fallStartY > _tuning.Height * 0.9f;
+        float drop = State == MascotState.Falling ? Y - _fallStartY : 0f;
         PlatformId = platform.Id;
         LeaveWall();
         X = Math.Clamp(X, platform.X0, platform.X1);
         VelocityX = 0f;
         VelocityY = 0f;
-        SetState(hard ? MascotState.Tumble : MascotState.Landing);
+        // A long fall knocks it flat on its face more often than not.
+        if (drop > _tuning.Height * 2f && _random.NextDouble() < 0.65)
+            SetState(MascotState.Sprawl);
+        else
+            SetState(drop > _tuning.Height * 0.9f ? MascotState.Tumble : MascotState.Landing);
     }
 
     private void EnterIdle(bool shortWait = false)
@@ -751,6 +876,36 @@ public sealed class MascotBrain
         return Lerp(top, bottom, (float)_random.NextDouble());
     }
 
+    /// <summary>Where to lie down near <paramref name="x"/>: the body needs about a height of room.</summary>
+    private float LieSpot(Platform platform, float x)
+    {
+        float half = _tuning.Height * 0.6f;
+        return platform.Width <= half * 2f ? (platform.X0 + platform.X1) / 2f : Math.Clamp(x, platform.X0 + half, platform.X1 - half);
+    }
+
+    /// <summary>When lying or sprawled, gets up first and walks (or runs) to x afterwards.</summary>
+    private bool GettingUpFirst(float x, bool run)
+    {
+        if (State is not (MascotState.Lie or MascotState.Sprawl or MascotState.GetUp))
+            return false;
+        _afterGetUp = (x, run);
+        if (State == MascotState.Lie)
+            SetState(MascotState.GetUp);
+        return true;
+    }
+
+    private void FinishGettingUp()
+    {
+        var next = _afterGetUp;
+        _afterGetUp = null;
+        EnterIdle(shortWait: true);
+        if (next is (float x, bool run))
+        {
+            EnterWalk(x);
+            Running = run && State == MascotState.Walk;
+        }
+    }
+
     private void LeaveWall()
     {
         _wallId = null;
@@ -769,6 +924,10 @@ public sealed class MascotBrain
     {
         var previous = State;
         State = next;
+        if (next != MascotState.Walk)
+            Running = false;
+        if (next is MascotState.Dragged or MascotState.Falling)
+            _afterGetUp = null;
         _stateTime = 0f;
         if (previous != next)
             StateChanged?.Invoke(previous, next);

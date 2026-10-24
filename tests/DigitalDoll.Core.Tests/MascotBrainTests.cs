@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DigitalDoll.Core.Acting;
 using DigitalDoll.Core.Mascot;
 using Xunit;
 
@@ -401,5 +402,178 @@ public class SurroundingsTests
             new DesktopWindow(3, 100, 600, 150, 900),  // narrower than the character
         });
         Assert.Single(s.Platforms);
+    }
+}
+
+public class TouchAndRestTests
+{
+    private const float Width = 1920f, Height = 1040f, Character = 300f;
+    private static readonly MascotTuning Tuning = new() { Height = Character };
+
+    private static MascotBrain Create(int seed = 1) =>
+        new(Tuning, new Random(seed), 960f, Surroundings.Screen(Width, Height, Character));
+
+    private static void Run(MascotBrain brain, float seconds, float dt = 1f / 60f)
+    {
+        for (float t = 0; t < seconds; t += dt)
+            brain.Update(dt);
+    }
+
+    [Fact]
+    public void LiesDownAndGetsUpWhenWoken()
+    {
+        var brain = Create();
+        brain.LieDown();
+        Run(brain, 0.1f);
+        Assert.Equal(MascotState.Lie, brain.State);
+        Run(brain, 5f);
+        Assert.Equal(MascotState.Lie, brain.State);
+        brain.Wake();
+        Assert.Equal(MascotState.GetUp, brain.State);
+        Run(brain, Tuning.GetUpSeconds + 0.1f);
+        Assert.Equal(MascotState.Idle, brain.State);
+    }
+
+    [Fact]
+    public void SometimesLiesDownOnItsOwn()
+    {
+        bool lay = false;
+        for (int seed = 1; seed <= 10 && !lay; seed++)
+        {
+            var brain = Create(seed);
+            for (int i = 0; i < 60 * 300 && !lay; i++)
+            {
+                brain.Update(1f / 60f);
+                lay = brain.State == MascotState.Lie;
+            }
+        }
+        Assert.True(lay);
+    }
+
+    [Fact]
+    public void LongFallsOftenEndFlatOnTheFace()
+    {
+        int sprawled = 0;
+        for (int seed = 1; seed <= 20; seed++)
+        {
+            var brain = Create(seed);
+            brain.BeginDrag();
+            brain.DragTo(900f, 50f);
+            brain.EndDrag(0f, 0f);
+            var seen = new HashSet<MascotState>();
+            for (int i = 0; i < 60 * 6; i++)
+            {
+                brain.Update(1f / 60f);
+                seen.Add(brain.State);
+            }
+            if (seen.Contains(MascotState.Sprawl))
+            {
+                sprawled++;
+                Assert.Contains(MascotState.GetUp, seen);
+            }
+            else
+            {
+                Assert.Contains(MascotState.Tumble, seen);
+            }
+        }
+        Assert.InRange(sprawled, 5, 19);
+    }
+
+    [Fact]
+    public void HoldStopsWalkingAndDelaysDecisions()
+    {
+        var brain = Create();
+        brain.WalkTo(1500f);
+        Run(brain, 0.5f);
+        brain.Hold(10f);
+        Assert.Equal(MascotState.Idle, brain.State);
+        float x = brain.X;
+        Run(brain, 9.5f);
+        Assert.Equal(MascotState.Idle, brain.State);
+        Assert.Equal(x, brain.X);
+    }
+
+    [Fact]
+    public void FleesAwayFromTheCursorAtARun()
+    {
+        var brain = Create();
+        brain.Flee(brain.X - 10f, brain.Y - 100f);
+        Assert.Equal(MascotState.Walk, brain.State);
+        Assert.True(brain.Running);
+        Assert.True(brain.TargetX > brain.X);
+        Run(brain, 0.2f);
+        Assert.True(brain.VelocityX > Tuning.WalkSpeed * 2f);
+
+        // Lying down: gets up first, then runs.
+        brain = Create();
+        brain.LieDown();
+        Run(brain, 0.1f);
+        brain.Flee(brain.X + 10f, brain.Y);
+        Assert.Equal(MascotState.GetUp, brain.State);
+        Run(brain, Tuning.GetUpSeconds + 0.05f);
+        Assert.Equal(MascotState.Walk, brain.State);
+        Assert.True(brain.Running);
+        Assert.True(brain.TargetX < brain.X);
+    }
+
+    [Fact]
+    public void PettingIsDetectedAfterSustainedStroking()
+    {
+        var touch = new TouchTracker(new Random(1));
+        // Passing over quickly is not petting.
+        TouchReaction? reaction = null;
+        for (int i = 0; i < 10; i++)
+            reaction ??= touch.Update(1f / 60f, 0.1f, TouchZone.Head);
+        for (int i = 0; i < 60; i++)
+            reaction ??= touch.Update(1f / 60f, 0f, TouchZone.Head);
+        Assert.Null(reaction);
+        Assert.False(touch.Petting);
+
+        // Rubbing back and forth (about 1.5 heights a second).
+        for (int i = 0; i < 60 && reaction == null; i++)
+            reaction = touch.Update(1f / 60f, 0.025f, TouchZone.Head);
+        Assert.NotNull(reaction);
+        Assert.True(touch.Petting);
+        Assert.Equal(Emotion.Happy, reaction!.Emotion);
+
+        // Long enough and it gets fed up.
+        TouchReaction? fed = null;
+        for (int i = 0; i < 60 * 20 && fed == null; i++)
+            fed = touch.Update(1f / 60f, 0.025f, TouchZone.Head);
+        Assert.True(fed!.Flee);
+        Assert.True(touch.Grumpy);
+    }
+
+    [Fact]
+    public void RubbingTheBodyIsEmbarrassingAndShorterLived()
+    {
+        var touch = new TouchTracker(new Random(1));
+        TouchReaction? first = null, fed = null;
+        float t = 0f;
+        for (int i = 0; i < 60 * 20 && fed == null; i++)
+        {
+            var r = touch.Update(1f / 60f, 0.025f, TouchZone.Body);
+            if (r != null && first == null)
+                first = r;
+            else if (r?.Flee == true)
+                fed = r;
+            t += 1f / 60f;
+        }
+        Assert.Equal(Emotion.Shy, first!.Emotion);
+        Assert.NotNull(fed);
+        Assert.InRange(t, TouchTracker.RubPatience, TouchTracker.RubPatience + 1f);
+    }
+
+    [Fact]
+    public void PokesVaryAndTooManyAnnoy()
+    {
+        var touch = new TouchTracker(new Random(2));
+        var first = touch.Poke(TouchZone.Body);
+        var second = touch.Poke(TouchZone.Body);
+        Assert.NotEqual(first.Gesture, second.Gesture);
+        touch.Poke(TouchZone.Body);
+        Assert.Equal(Emotion.Angry, touch.Poke(TouchZone.Body).Emotion);
+        touch.Poke(TouchZone.Body);
+        Assert.True(touch.Poke(TouchZone.Body).Flee);
     }
 }
