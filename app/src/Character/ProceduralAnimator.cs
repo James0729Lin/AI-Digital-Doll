@@ -182,7 +182,9 @@ public sealed partial class ProceduralAnimator : IPerformer
     {
         if (Springs == null)
             return;
-        float drape = MathF.Max(MathF.Max(_lie, _sprawl), 0.3f * _tumble);
+        // Lying down the skirt and hair fall toward the floor; sitting, the skirt settles
+        // over the lap instead of flaring up.
+        float drape = MathF.Max(MathF.Max(MathF.Max(_lie, _sprawl), 0.3f * _tumble), 0.9f * MathF.Max(_sit, _floorSit));
         if (drape < 0.01f)
             drape = 0f;
         // Only touch the springs when the pull changes (and always settle back to exactly zero).
@@ -427,14 +429,15 @@ public sealed partial class ProceduralAnimator : IPerformer
         _rig.Rotate("RightUpperLeg", left, -1.5f * w);
         _rig.Rotate("LeftLowerLeg", left, (1.45f + 0.18f * swing) * w);
         _rig.Rotate("RightLowerLeg", left, (1.45f - 0.18f * swing) * w);
-        _rig.Rotate("LeftUpperLeg", _rig.Forward, -0.08f * w);
-        _rig.Rotate("RightUpperLeg", _rig.Forward, 0.08f * w);
-        _rig.Rotate("Spine", left, 0.06f * w);
-        // Hands resting on the thighs.
-        _rig.Rotate("LeftUpperArm", left, -0.2f * w);
-        _rig.Rotate("RightUpperArm", left, -0.2f * w);
-        _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, 0.95f * w);
-        _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, 0.95f * w);
+        // Knees together, the lower legs a little apart and swinging.
+        _rig.Rotate("LeftUpperLeg", _rig.Forward, 0.07f * w);
+        _rig.Rotate("RightUpperLeg", _rig.Forward, -0.07f * w);
+        _rig.Rotate("LeftLowerLeg", _rig.Forward, -0.1f * w);
+        _rig.Rotate("RightLowerLeg", _rig.Forward, 0.1f * w);
+        _rig.Rotate("Spine", left, 0.1f * w);
+        // Hands together on the lap, holding the skirt down.
+        Arm(1, 0f, 0.3f, 0.75f, 0.6f, 0f, w);
+        Arm(-1, 0f, 0.3f, 0.75f, 0.6f, 0f, w);
     }
 
     private void PoseJump()
