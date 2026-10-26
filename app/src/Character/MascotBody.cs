@@ -103,7 +103,9 @@ public sealed class HumanBody : IMascotBody
         MascotState.Falling or MascotState.Jump => facing * FacingTurn * 0.6f,
         // Side on to the screen edge it is climbing.
         MascotState.Climb or MascotState.Cling => wallSide * Mathf.Pi / 2f,
-        MascotState.Dragged or MascotState.Sit or MascotState.Lie or MascotState.Dance => 0f,
+        MascotState.Dragged or MascotState.Lie or MascotState.Dance => 0f,
+        // Sitting on an edge, turned a little so the thighs read instead of pointing at the viewer.
+        MascotState.Sit => facing * 0.55f,
         // Three-quarters on, so the legs read instead of pointing at the viewer.
         MascotState.Tumble or MascotState.FloorSit => facing * 0.65f,
         // Flat on its face: seen from the side.
