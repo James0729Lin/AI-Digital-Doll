@@ -27,7 +27,6 @@ public static class AppWindow
     public static void UseEditorMode(Window window)
     {
         DisplayServer.WindowSetMousePassthrough(System.Array.Empty<Vector2>());
-        window.MousePassthrough = false;
         window.Transparent = false;
         window.TransparentBg = false;
         window.AlwaysOnTop = false;
