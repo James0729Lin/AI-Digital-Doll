@@ -65,6 +65,7 @@ public sealed class AnimalAnimator : IPerformer
     private float _time, _phase, _climbPhase;
     private float _idle = 1f, _walk, _run, _sit, _lie, _sprawl, _getUp, _tumble, _drag, _fall, _land, _jump, _climb, _dance;
     private bool _dancing;
+    private float _slip, _hang, _climbUp;
     private float _pet, _petBody, _talk;
     private float _stateTime;
     private MascotState _state;
@@ -137,7 +138,7 @@ public sealed class AnimalAnimator : IPerformer
     }
 
     public void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false,
-        bool bracing = false)
+        bool bracing = false, ClimbGrip grip = ClimbGrip.Steady)
     {
         // Animals sit on their haunches wherever they are, and dance by bobbing about.
         if (state == MascotState.FloorSit)
@@ -169,7 +170,11 @@ public sealed class AnimalAnimator : IPerformer
         // Little legs take quick steps: a stride of about one body height.
         float stride = (_rig.Biped ? 0.9f : 1.1f) * _rig.Height * (1f + 0.6f * _run);
         _phase = (_phase + dt * Mathf.Tau * MathF.Abs(speedMetres) / stride) % Mathf.Tau;
-        _climbPhase = (_climbPhase + dt * Mathf.Tau * MathF.Abs(climbSpeedMetres) / (0.6f * _rig.Height)) % Mathf.Tau;
+        if (grip == ClimbGrip.Steady)
+            _climbPhase = (_climbPhase + dt * Mathf.Tau * MathF.Abs(climbSpeedMetres) / (0.6f * _rig.Height)) % Mathf.Tau;
+        Ease(ref _slip, state == MascotState.Climb && grip == ClimbGrip.Slipping ? 1f : 0f, dt, 16f);
+        Ease(ref _hang, state == MascotState.Climb && grip == ClimbGrip.Hanging ? 1f : 0f, dt, 7f);
+        Ease(ref _climbUp, state == MascotState.Climb && grip == ClimbGrip.Steady && climbSpeedMetres < 0f ? 1f : 0f, dt, 4f);
 
         float push = -dragVelocityMetres * 1.5f;
         _dangleVelocity += (push - _dangle * 40f - _dangleVelocity * 5f) * dt;
@@ -543,24 +548,96 @@ public sealed class AnimalAnimator : IPerformer
         _p.RootPitch += -MathF.PI / 2f * w;
         _p.RootForward += (_rig.BodyHeight - _rig.LegLength * 0.9f) * w;
         float s = MathF.Sin(_climbPhase);
+        float steady = w * (1f - MathF.Max(_slip, _hang));
+        float heave = MathF.Max(0f, s) * _climbUp;
         if (Quadruped)
         {
-            _p.LegSwing[0] += (-0.9f - 0.35f * s) * w;
-            _p.LegSwing[1] += (-0.9f + 0.35f * s) * w;
-            _p.LegSwing[2] += (-0.15f + 0.35f * s) * w;
-            _p.LegSwing[3] += (-0.15f - 0.35f * s) * w;
+            // Front paws reach up in turns with big strokes; the back legs push off
+            // together, so the body bunches and stretches like a cat going up a tree.
+            _p.LegSwing[0] += (-1.25f - 0.6f * s) * steady;
+            _p.LegSwing[1] += (-1.25f + 0.6f * s) * steady;
+            float push = MathF.Sin(_climbPhase * 2f);
+            _p.LegSwing[2] += (-0.3f + 0.45f * push) * steady;
+            _p.LegSwing[3] += (-0.3f + 0.45f * push) * steady;
+            _p.LegFold[2] += 0.25f * MathF.Max(0f, -push) * steady;
+            _p.LegFold[3] += 0.25f * MathF.Max(0f, -push) * steady;
             for (int i = 0; i < 4; i++)
-                _p.LegSpread[i] += 0.25f * w;
+                _p.LegSpread[i] += 0.3f * steady;
+            _p.BodyPitch += 0.12f * push * steady;
+            _p.BodyRoll += 0.12f * s * steady;
+            _p.BodyY += 0.01f * push * steady;
         }
         else
         {
-            _p.LegSwing[0] += (-0.4f - 0.4f * s) * w;
-            _p.LegSwing[1] += (-0.4f + 0.4f * s) * w;
-            _p.Wing[0] += (0.8f + 0.5f * MathF.Sin(_time * 18f)) * w;
-            _p.Wing[1] += (0.8f + 0.5f * MathF.Sin(_time * 18f + 1f)) * w;
+            _p.LegSwing[0] += (-0.4f - 0.5f * s) * steady;
+            _p.LegSwing[1] += (-0.4f + 0.5f * s) * steady;
+            _p.Wing[0] += (0.8f + 0.5f * MathF.Sin(_time * 18f)) * steady;
+            _p.Wing[1] += (0.8f + 0.5f * MathF.Sin(_time * 18f + 1f)) * steady;
         }
-        _p.HeadPitch += -0.2f * w;
-        _p.TailLift += -0.5f * w;
+        // Looking up at where it is going; the tail hangs and sways for balance.
+        _p.HeadPitch += -(0.4f + 0.1f * heave) * steady;
+        _p.HeadRoll += 0.1f * s * _climbUp * steady;
+        _p.TailLift += -0.7f * w;
+        _p.TailWag += 0.5f * MathF.Sin(_time * 2.4f) * steady;
+        _p.Squint += 0.35f * heave;
+
+        // Slipping: every paw scrabbling at the wall, ears back, eyes wide, sliding.
+        if (_slip > 0.001f)
+        {
+            float sl = w * _slip;
+            float scrabble = MathF.Sin(_time * 26f);
+            if (Quadruped)
+            {
+                _p.LegSwing[0] += (-1.9f + 0.35f * scrabble) * sl;
+                _p.LegSwing[1] += (-1.9f - 0.35f * scrabble) * sl;
+                _p.LegSwing[2] += (-0.4f + 0.6f * scrabble) * sl;
+                _p.LegSwing[3] += (-0.4f - 0.6f * scrabble) * sl;
+                for (int i = 0; i < 4; i++)
+                    _p.LegSpread[i] += 0.45f * sl;
+            }
+            else
+            {
+                _p.LegSwing[0] += (-0.4f + 0.7f * scrabble) * sl;
+                _p.LegSwing[1] += (-0.4f - 0.7f * scrabble) * sl;
+                _p.Wing[0] += (1.6f + 0.6f * MathF.Sin(_time * 30f)) * sl;
+                _p.Wing[1] += (1.6f + 0.6f * MathF.Sin(_time * 30f + 0.8f)) * sl;
+            }
+            _p.RootPitch += 0.15f * sl;
+            _p.HeadPitch += 0.2f * sl;
+            _p.Ear[0] += -0.7f * sl;
+            _p.Ear[1] += -0.7f * sl;
+            _p.Wide += 1f * sl;
+            _p.Mouth += 0.5f * sl;
+            _p.TailWag += 0.8f * MathF.Sin(_time * 14f) * sl;
+        }
+
+        // Caught again: hanging by the front paws, back legs dangling, then a heave.
+        if (_hang > 0.001f)
+        {
+            float hg = w * _hang;
+            float swing = MathF.Sin(_time * 3.4f);
+            if (Quadruped)
+            {
+                _p.LegSwing[0] += -2.0f * hg;
+                _p.LegSwing[1] += -1.85f * hg;
+                _p.LegSwing[2] += (0.35f + 0.25f * swing) * hg;
+                _p.LegSwing[3] += (0.35f - 0.25f * swing) * hg;
+                _p.LegSpread[0] += 0.3f * hg;
+                _p.LegSpread[1] += 0.3f * hg;
+            }
+            else
+            {
+                _p.LegSwing[0] += (0.3f + 0.2f * swing) * hg;
+                _p.LegSwing[1] += (0.3f - 0.2f * swing) * hg;
+                _p.Wing[0] += 1.2f * hg;
+                _p.Wing[1] += 1.2f * hg;
+            }
+            _p.BodyRoll += 0.1f * swing * hg;
+            _p.HeadPitch += -0.5f * hg;
+            _p.EarDroop += 0.4f * hg;
+            _p.Squint += 0.3f * hg;
+            _p.TailWag += 0.4f * swing * hg;
+        }
     }
 
     private void PosePetting()

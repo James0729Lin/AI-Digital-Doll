@@ -26,6 +26,19 @@ public enum Species
     Pig,
 }
 
+/// <summary>How an animal is drawn: each species can come in several versions.</summary>
+public enum AnimalStyle
+{
+    /// <summary>1.0: built from rounded shapes, with its own procedural motion.</summary>
+    Classic,
+
+    /// <summary>2.0: Kenney's "Cube Pets" (CC0), blocky and animated.</summary>
+    Cube,
+
+    /// <summary>3.0: Quaternius' low-poly animals (CC0), animated (cat and dog only).</summary>
+    LowPoly,
+}
+
 /// <summary>User preferences stored as JSON in the user data folder.</summary>
 public sealed class AppSettings
 {
@@ -40,6 +53,9 @@ public sealed class AppSettings
 
     [JsonPropertyName("animal")]
     public Species Animal { get; set; } = Species.Cat;
+
+    [JsonPropertyName("animalStyle")]
+    public AnimalStyle AnimalStyle { get; set; } = AnimalStyle.Classic;
 
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 

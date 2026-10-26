@@ -18,8 +18,9 @@ public interface IPerformer
     Gesture? CurrentGesture { get; }
 
     /// <param name="bracing">Falling on purpose (feet first) rather than thrown or knocked off.</param>
+    /// <param name="grip">While climbing: slipping down or hanging on after a slip.</param>
     void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false,
-        bool bracing = false);
+        bool bracing = false, ClimbGrip grip = ClimbGrip.Steady);
     void Play(GestureCue cue, bool now = false);
     void StopGestures();
     void Feel(Emotion emotion, float intensity, float seconds = 4f);
