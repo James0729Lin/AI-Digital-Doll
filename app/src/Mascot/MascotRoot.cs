@@ -76,6 +76,7 @@ public partial class MascotRoot : Node3D
     private float _windowsCheck;
     private Vector2[] _region = Array.Empty<Vector2>();
     private bool? _clickThrough;
+    private float _wallShift;
 
     private bool _dragging;
     private bool _pressed;
@@ -609,7 +610,7 @@ public partial class MascotRoot : Node3D
     private void PlaceCharacter(float dt)
     {
         var brain = _brain!;
-        float x = _snapshot != null ? _windowSize.X * 0.5f : brain.X;
+        float x = _snapshot != null ? _windowSize.X * 0.5f : brain.X + UpdateWallShift(dt);
         _pivot.Position = ScreenToWorld(new Vector2(x, brain.Y));
 
         float target = _body!.Yaw(brain.State, brain.Facing, brain.WallSide, Facing0);
@@ -617,6 +618,33 @@ public partial class MascotRoot : Node3D
             target = yaw;
         _yaw = Mathf.Lerp(_yaw, target, 1f - MathF.Exp(-8f * dt));
         _pivot.Rotation = new Vector3(0f, _yaw, 0f);
+    }
+
+    /// <summary>
+    /// While climbing, how far the character is drawn away from its wall: knees and
+    /// hands reach toward the wall by different amounts on every model and in every
+    /// pose, so the drawn outline is measured and the character eased off the wall until
+    /// nothing pokes past it (past a screen edge it would be cut off).
+    /// </summary>
+    private float UpdateWallShift(float dt)
+    {
+        var brain = _brain!;
+        float target = 0f;
+        if (brain.State is MascotState.Climb or MascotState.Cling && brain.WallId is long id
+            && brain.Surroundings.FindWall(id) is Wall wall && _tight.Length >= 3)
+        {
+            float extreme = wall.Side > 0 ? _tight.Max(p => p.X) : _tight.Min(p => p.X);
+            // A few pixels' gap so a reaching limb does not touch the edge.
+            float overshoot = (extreme - wall.X) * wall.Side - HitMargin + 6f;
+            // Only ever away from the wall (never pulled into it).
+            target = _wallShift - wall.Side * overshoot;
+            target = wall.Side > 0 ? MathF.Min(target, 0f) : MathF.Max(target, 0f);
+        }
+        // Quick to move off the wall, slow to drift back, so the heaving limbs do not
+        // make the character rock toward and away from it.
+        bool away = MathF.Abs(target) > MathF.Abs(_wallShift);
+        _wallShift = Mathf.Lerp(_wallShift, target, 1f - MathF.Exp(-(away ? 14f : 0.8f) * dt));
+        return _wallShift;
     }
 
     /// <summary>Set while the character should face the user (talking, being petted).</summary>
