@@ -190,11 +190,98 @@ public class MascotBrainTests
     }
 
     [Fact]
-    public void SitsDownOnRequest()
+    public void SitsOnTheGroundWhenAskedOnTheFloor()
     {
         var brain = Create();
         brain.SitDown();
+        Assert.Equal(MascotState.FloorSit, brain.State);
+        Run(brain, Tuning.MinFloorSitSeconds - 0.1f);
+        Assert.Equal(MascotState.FloorSit, brain.State);
+        int frames = 0;
+        while (brain.State == MascotState.FloorSit && frames++ < 60 * 30)
+            brain.Update(1f / 60f);
+        Assert.Equal(MascotState.GetUp, brain.State);
+    }
+
+    [Fact]
+    public void SitsOnTheEdgeWhenAskedOnAWindow()
+    {
+        var brain = Create(surroundings: WithWindow(300, 500, 1100, 900));
+        brain.BeginDrag();
+        brain.DragTo(700f, 400f);
+        brain.EndDrag(0f, 0f);
+        Run(brain, 1f);
+        brain.SitDown();
         Assert.Equal(MascotState.Sit, brain.State);
+    }
+
+    [Fact]
+    public void WalkingToSomewhereFromTheGroundGetsUpFirst()
+    {
+        var brain = Create();
+        brain.SitDown();
+        brain.WalkTo(1500f);
+        Assert.Equal(MascotState.GetUp, brain.State);
+        Run(brain, Tuning.GetUpSeconds + 0.1f);
+        Assert.Equal(MascotState.Walk, brain.State);
+    }
+
+    [Fact]
+    public void DoesMoreThanWalkOnAnEmptyFloor()
+    {
+        var seen = new HashSet<MascotState>();
+        bool jogged = false;
+        foreach (int seed in new[] { 1, 2, 3 })
+        {
+            var brain = Create(seed);
+            for (int i = 0; i < 60 * 300; i++)
+            {
+                brain.Update(1f / 60f);
+                seen.Add(brain.State);
+                jogged |= brain.Running;
+            }
+        }
+        Assert.Contains(MascotState.FloorSit, seen);
+        Assert.Contains(MascotState.Dance, seen);
+        Assert.True(jogged, "it should jog now and then");
+    }
+
+    [Fact]
+    public void HoldStopsDancing()
+    {
+        var brain = Create();
+        brain.Preview(MascotState.Dance);
+        brain.Hold(2f);
+        Assert.Equal(MascotState.Idle, brain.State);
+    }
+
+    [Fact]
+    public void SteppingOffAWindowOnPurposeLandsOnTheFeet()
+    {
+        // A window top 1.5 heights above the floor: falling off it by accident tumbles,
+        // hopping down on purpose does not.
+        var brain = Create(surroundings: WithWindow(300, 590, 1100, 1000));
+        int controlled = 0;
+        for (int seed = 1; seed <= 20 && controlled < 3; seed++)
+        {
+            brain = Create(seed, surroundings: WithWindow(300, 590, 1100, 1000));
+            brain.BeginDrag();
+            brain.DragTo(700f, 500f);
+            brain.EndDrag(0f, 0f);
+            for (int i = 0; i < 60 * 300; i++)
+            {
+                var before = brain.State;
+                bool wasControlled = brain.ControlledFall;
+                brain.Update(1f / 60f);
+                if (before == MascotState.Falling && brain.State != MascotState.Falling && wasControlled && brain.OnFloor)
+                {
+                    Assert.Equal(MascotState.Landing, brain.State);
+                    controlled++;
+                    break;
+                }
+            }
+        }
+        Assert.True(controlled > 0, "it should hop down off the window on its own now and then");
     }
 
     [Fact]

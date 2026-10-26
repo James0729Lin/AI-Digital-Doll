@@ -24,8 +24,14 @@ public enum MascotState
     /// <summary>Flat on its face after a very long fall.</summary>
     Sprawl,
 
-    /// <summary>Getting back on its feet after lying or sprawling.</summary>
+    /// <summary>Getting back on its feet after lying, sprawling or sitting on the ground.</summary>
     GetUp,
+
+    /// <summary>Sitting on the ground with the knees up (where the legs cannot hang over an edge).</summary>
+    FloorSit,
+
+    /// <summary>Dancing on the spot for a little while.</summary>
+    Dance,
 }
 
 public sealed class MascotTuning
@@ -45,6 +51,10 @@ public sealed class MascotTuning
     public float GetUpSeconds { get; init; } = 1.1f;
     public float MinLieSeconds { get; init; } = 14f;
     public float MaxLieSeconds { get; init; } = 35f;
+    public float MinFloorSitSeconds { get; init; } = 8f;
+    public float MaxFloorSitSeconds { get; init; } = 20f;
+    public float MinDanceSeconds { get; init; } = 4f;
+    public float MaxDanceSeconds { get; init; } = 9f;
 
     /// <summary>Walking speed multiplier when running off.</summary>
     public float RunFactor { get; init; } = 2.4f;
@@ -79,6 +89,7 @@ public sealed class MascotBrain
         JumpToWall,
         ClimbDown,
         Lie,
+        FloorSit,
     }
 
     private readonly MascotTuning _tuning;
@@ -97,6 +108,7 @@ public sealed class MascotBrain
     private float _jumpTime, _jumpDuration;
     private float _jumpStartX, _jumpStartY;
     private float _hold;
+    private bool _controlledFall;
     private (float X, bool Run)? _afterGetUp;
 
     public MascotBrain(MascotTuning tuning, Random random, float startX, Surroundings surroundings)
@@ -147,6 +159,12 @@ public sealed class MascotBrain
 
     /// <summary>True while running off (walking at <see cref="MascotTuning.RunFactor"/> times the speed).</summary>
     public bool Running { get; private set; }
+
+    /// <summary>
+    /// True while dropping down on purpose (stepping off a ledge, letting go of a wall):
+    /// feet first and ready to land, instead of thrown or knocked off.
+    /// </summary>
+    public bool ControlledFall => State == MascotState.Falling && _controlledFall;
 
     /// <summary>Seconds left during which the mascot stays where it is (see <see cref="Hold"/>).</summary>
     public float HoldTime => _hold;
@@ -228,6 +246,14 @@ public sealed class MascotBrain
                 if (_stateTime >= _waitDuration)
                     SetState(MascotState.GetUp);
                 break;
+            case MascotState.FloorSit:
+                if (_stateTime >= _waitDuration && _hold <= 0f)
+                    SetState(MascotState.GetUp);
+                break;
+            case MascotState.Dance:
+                if (_stateTime >= _waitDuration)
+                    EnterIdle(shortWait: true);
+                break;
             case MascotState.Sprawl:
                 if (_stateTime >= _tuning.SprawlSeconds)
                     SetState(MascotState.GetUp);
@@ -284,7 +310,7 @@ public sealed class MascotBrain
     {
         if (PlatformId is not long id || Surroundings.FindPlatform(id) is not Platform platform)
             return;
-        if (State is not (MascotState.Idle or MascotState.Walk or MascotState.Sit or MascotState.Landing))
+        if (State is not (MascotState.Idle or MascotState.Walk or MascotState.Sit or MascotState.Landing or MascotState.FloorSit or MascotState.Dance))
             return;
         _plan = Plan.Lie;
         EnterWalk(LieSpot(platform, X));
@@ -292,11 +318,12 @@ public sealed class MascotBrain
 
     /// <summary>
     /// For previews and snapshots: switches to a state shown on the spot (Sit, Lie,
-    /// Sprawl, GetUp, Tumble) while standing on a platform.
+    /// Sprawl, GetUp, Tumble, FloorSit, Dance) while standing on a platform.
     /// </summary>
     public void Preview(MascotState state)
     {
-        if (PlatformId is null || state is not (MascotState.Sit or MascotState.Lie or MascotState.Sprawl or MascotState.GetUp or MascotState.Tumble))
+        if (PlatformId is null || state is not (MascotState.Sit or MascotState.Lie or MascotState.Sprawl or MascotState.GetUp
+                or MascotState.Tumble or MascotState.FloorSit or MascotState.Dance))
             return;
         _plan = Plan.None;
         _waitDuration = float.MaxValue;
@@ -312,14 +339,14 @@ public sealed class MascotBrain
 
     /// <summary>
     /// Keeps the mascot where it is for a while (while it talks or reacts): it stops
-    /// walking, keeps sitting or holding on, and a lying mascot gets up.
+    /// walking or dancing, keeps sitting or holding on, and a lying mascot gets up.
     /// </summary>
     public void Hold(float seconds)
     {
         _hold = MathF.Max(_hold, seconds);
         switch (State)
         {
-            case MascotState.Walk:
+            case MascotState.Walk or MascotState.Dance:
                 _plan = Plan.None;
                 EnterIdle(shortWait: true);
                 break;
@@ -371,10 +398,10 @@ public sealed class MascotBrain
             StartClimb(wall, y);
     }
 
-    /// <summary>Sits down where the mascot stands.</summary>
+    /// <summary>Sits down where the mascot stands (on the ground when on the floor).</summary>
     public void SitDown()
     {
-        if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing or MascotState.Tumble))
+        if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing or MascotState.Tumble or MascotState.Dance))
             return;
         _plan = Plan.Sit;
         Arrive();
@@ -441,10 +468,19 @@ public sealed class MascotBrain
 
         var options = new List<(float Weight, Action Act)>
         {
-            (3f, () => EnterWalk(PickWalkTarget(here))),
+            (2.2f, () => EnterWalk(PickWalkTarget(here))),
+            // Now and then a jog instead of a walk.
+            (0.6f, () =>
+            {
+                EnterWalk(PickWalkTarget(here));
+                Running = State == MascotState.Walk;
+            }),
+            (0.5f, StartDance),
         };
         if (here.Width >= _tuning.Height * 1.3f)
             options.Add((Staying ? 0.6f : 0.45f, () => { _plan = Plan.Lie; EnterWalk(LieSpot(here, PickWalkTarget(here, nearby: true))); }));
+        if (here.Width >= _tuning.Height * 0.8f)
+            options.Add((Staying ? 1.2f : 0.8f, () => { _plan = Plan.FloorSit; EnterWalk(PickWalkTarget(here, nearby: true)); }));
         if (Staying)
         {
             options.Add((2f, () => EnterIdle()));
@@ -541,7 +577,7 @@ public sealed class MascotBrain
         var options = new List<(float Weight, Action Act)>
         {
             (1.5f, () => StartClimb(wall, PickWallTarget(wall))),
-            (0.5f, () => StartFalling(-wall.Side * 120f, 0f)),
+            (0.5f, () => StartFalling(-wall.Side * 120f, 0f, controlled: true)),
         };
         if (wall.TopPlatform is long top && Surroundings.FindPlatform(top) is not null)
             options.Add((2.5f, () => StartClimb(wall, wall.Top)));
@@ -634,13 +670,22 @@ public sealed class MascotBrain
             case Plan.Jump:
                 StartJump(_jumpTarget, _jumpTargetX);
                 break;
+            // The legs hang over the edge of a window top; on the floor they would hang
+            // over the taskbar, so it sits on the ground there instead.
+            case Plan.Sit when OnFloor:
+            case Plan.FloorSit:
+                VelocityX = 0f;
+                _waitDuration = Lerp(_tuning.MinFloorSitSeconds, _tuning.MaxFloorSitSeconds, (float)_random.NextDouble());
+                SetState(MascotState.FloorSit);
+                break;
             case Plan.Sit:
                 VelocityX = 0f;
                 _waitDuration = Lerp(6f, 14f, (float)_random.NextDouble());
                 SetState(MascotState.Sit);
                 break;
             case Plan.StepOff:
-                StartFalling(Facing * _tuning.WalkSpeed * 0.6f, 0f);
+                // A little hop off the edge.
+                StartFalling(Facing * _tuning.WalkSpeed * 1.2f, -_tuning.Height * 1.2f, controlled: true);
                 break;
             case Plan.JumpToWall:
                 StartJumpToWall(_planWall);
@@ -769,7 +814,7 @@ public sealed class MascotBrain
         Y = _jumpStartY + VelocityY * _jumpTime + 0.5f * _tuning.Gravity * _jumpTime * _jumpTime;
     }
 
-    private void StartFalling(float velocityX, float velocityY)
+    private void StartFalling(float velocityX, float velocityY, bool controlled = false)
     {
         PlatformId = null;
         LeaveWall();
@@ -778,6 +823,7 @@ public sealed class MascotBrain
         VelocityX = velocityX;
         VelocityY = velocityY;
         _fallStartY = Y;
+        _controlledFall = controlled;
         SetState(MascotState.Falling);
     }
 
@@ -832,11 +878,23 @@ public sealed class MascotBrain
         X = Math.Clamp(X, platform.X0, platform.X1);
         VelocityX = 0f;
         VelocityY = 0f;
-        // A long fall knocks it flat on its face more often than not.
-        if (drop > _tuning.Height * 2f && _random.NextDouble() < 0.65)
+        // Jumping down on purpose it lands on its feet unless the drop is very long;
+        // thrown or knocked off, a long fall knocks it flat on its face more often than not.
+        bool controlled = _controlledFall;
+        _controlledFall = false;
+        if (controlled)
+            SetState(drop > _tuning.Height * 2.5f ? MascotState.Tumble : MascotState.Landing);
+        else if (drop > _tuning.Height * 2f && _random.NextDouble() < 0.65)
             SetState(MascotState.Sprawl);
         else
             SetState(drop > _tuning.Height * 0.9f ? MascotState.Tumble : MascotState.Landing);
+    }
+
+    private void StartDance()
+    {
+        VelocityX = 0f;
+        _waitDuration = Lerp(_tuning.MinDanceSeconds, _tuning.MaxDanceSeconds, (float)_random.NextDouble());
+        SetState(MascotState.Dance);
     }
 
     private void EnterIdle(bool shortWait = false)
@@ -896,13 +954,13 @@ public sealed class MascotBrain
         return platform.Width <= half * 2f ? (platform.X0 + platform.X1) / 2f : Math.Clamp(x, platform.X0 + half, platform.X1 - half);
     }
 
-    /// <summary>When lying or sprawled, gets up first and walks (or runs) to x afterwards.</summary>
+    /// <summary>When lying, sprawled or sitting on the ground, gets up first and walks (or runs) to x afterwards.</summary>
     private bool GettingUpFirst(float x, bool run)
     {
-        if (State is not (MascotState.Lie or MascotState.Sprawl or MascotState.GetUp))
+        if (State is not (MascotState.Lie or MascotState.Sprawl or MascotState.GetUp or MascotState.FloorSit))
             return false;
         _afterGetUp = (x, run);
-        if (State == MascotState.Lie)
+        if (State is MascotState.Lie or MascotState.FloorSit)
             SetState(MascotState.GetUp);
         return true;
     }

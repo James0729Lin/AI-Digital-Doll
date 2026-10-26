@@ -25,8 +25,8 @@ public sealed partial class ProceduralAnimator : IPerformer
     private float _time;
     private float _walkPhase;
     private float _idle = 1f, _walk, _drag, _fall, _land, _climb, _sit, _jump, _tumble;
-    private float _lie, _sprawl, _getUp, _run;
-    private float _tumbleTime, _sprawlTime, _lieTime;
+    private float _lie, _sprawl, _getUp, _run, _floorSit, _dance, _brace;
+    private float _tumbleTime, _sprawlTime, _lieTime, _fallTime, _danceTime;
     private int _lieSide = 1;
     private float _pet, _petBody;
 
@@ -54,6 +54,17 @@ public sealed partial class ProceduralAnimator : IPerformer
         _legScale = rig.Height / 1.6f;
         _fidgetDirector = new PerformanceDirector(random);
     }
+
+    /// <summary>
+    /// The model's spring bone settings (a VRM with <c>springbone_add_force</c>), if any:
+    /// lying down adds a downward pull so the skirt and hair drape toward the floor
+    /// instead of keeping their standing shape.
+    /// </summary>
+    public GodotObject? Springs { get; set; }
+
+    /// <summary>Downward pull on spring bones when fully lying, in skeleton units per second.</summary>
+    private const float DrapeForce = 2.5f;
+    private float _drapeApplied;
 
     /// <summary>Plays small idle motions (stretching, looking around…) now and then.</summary>
     public bool Fidgets { get; set; } = true;
@@ -84,9 +95,15 @@ public sealed partial class ProceduralAnimator : IPerformer
     public float LookYaw { get; set; }
     public float LookPitch { get; set; }
 
-    public void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false)
+    public void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false,
+        bool bracing = false)
     {
         _time += dt;
+        Ease(ref _floorSit, state == MascotState.FloorSit ? 1f : 0f, dt, 5f);
+        Ease(ref _dance, state == MascotState.Dance ? 1f : 0f, dt, 6f);
+        Ease(ref _brace, bracing ? 1f : 0f, dt, 12f);
+        _danceTime = state == MascotState.Dance ? _danceTime + dt : 0f;
+        _fallTime = state == MascotState.Falling ? _fallTime + dt : 0f;
         if (state == MascotState.Lie && _state != MascotState.Lie)
             _lieSide = _random.Next(2) == 0 ? -1 : 1;
         _state = state;
@@ -112,7 +129,8 @@ public sealed partial class ProceduralAnimator : IPerformer
         Ease(ref _idle, state == MascotState.Idle ? 1f : 0f, dt);
         Ease(ref _walk, state == MascotState.Walk ? 1f : 0f, dt);
         Ease(ref _drag, state == MascotState.Dragged ? 1f : 0f, dt);
-        Ease(ref _fall, state == MascotState.Falling ? 1f : 0f, dt);
+        // Out of the falling pose quickly on touchdown, so it does not linger in the landing.
+        Ease(ref _fall, state == MascotState.Falling ? 1f : 0f, dt, state == MascotState.Falling ? WeightRate : 16f);
         Ease(ref _land, state == MascotState.Landing ? 1f : 0f, dt, 16f);
 
         float strideLength = (0.95f + 0.5f * _run) * _legScale;
@@ -140,6 +158,8 @@ public sealed partial class ProceduralAnimator : IPerformer
         PoseLie();
         PoseSprawl();
         PoseGetUp();
+        PoseFloorSit();
+        PoseDance();
         PosePetting();
         PoseTalking();
         PoseGestures();
@@ -147,12 +167,28 @@ public sealed partial class ProceduralAnimator : IPerformer
         _rig.Commit();
 
         UpdateFace(dt);
+        UpdateDrape();
+    }
+
+    private void UpdateDrape()
+    {
+        if (Springs == null)
+            return;
+        float drape = MathF.Max(MathF.Max(_lie, _sprawl), 0.3f * _tumble);
+        if (drape < 0.01f)
+            drape = 0f;
+        // Only touch the springs when the pull changes (and always settle back to exactly zero).
+        if (drape == _drapeApplied || (drape > 0f && MathF.Abs(drape - _drapeApplied) < 0.01f))
+            return;
+        _drapeApplied = drape;
+        Springs.Set("springbone_add_force", _rig.Up * (-DrapeForce * drape));
     }
 
     private void PoseBase()
     {
         // Lower the arms from the rest pose (T or A); dragging and falling raise them again.
-        float lower = ArmsDown * (1f - 0.35f * _drag - 1.6f * _fall - 0.5f * _jump) - _rig.ArmDroop;
+        float panic = _fall * (1f - _brace);
+        float lower = ArmsDown * (1f - 0.35f * _drag - 0.95f * panic - 0.55f * _fall * _brace - 0.5f * _jump) - _rig.ArmDroop;
         var f = _rig.Forward;
         _rig.Rotate("LeftUpperArm", f, -lower);
         _rig.Rotate("RightUpperArm", f, lower);
@@ -246,15 +282,45 @@ public sealed partial class ProceduralAnimator : IPerformer
         if (w <= 0.001f)
             return;
         var left = _rig.Left;
-        float flail = MathF.Sin(_time * 14f);
-        _rig.Rotate("LeftUpperArm", _rig.Forward, 0.25f * flail * w);
-        _rig.Rotate("RightUpperArm", _rig.Forward, 0.25f * flail * w);
-        _rig.Rotate("LeftUpperLeg", left, -0.35f * w);
-        _rig.Rotate("RightUpperLeg", left, -0.1f * w);
-        _rig.Rotate("LeftLowerLeg", left, 0.7f * w);
-        _rig.Rotate("RightLowerLeg", left, 0.35f * w);
-        _rig.Rotate("Spine", left, -0.15f * w);
-        _rig.Rotate("Head", left, -0.2f * w);
+        var f = _rig.Forward;
+
+        // Knocked or thrown off: arms flapping together like wings and legs pedalling
+        // in the air, growing more frantic over the first moments of the fall.
+        float panic = w * (1f - _brace);
+        if (panic > 0.001f)
+        {
+            float ramp = Smooth(Mathf.Clamp(_fallTime / 0.35f, 0f, 1f));
+            float flap = MathF.Sin(_fallTime * 17f) * (0.12f + 0.2f * ramp);
+            _rig.Rotate("LeftUpperArm", f, flap * panic);
+            _rig.Rotate("RightUpperArm", f, -flap * panic);
+            _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, 0.45f * panic);
+            _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, 0.45f * panic);
+            float pedal = _fallTime * 11f;
+            float kick = 0.15f + 0.35f * ramp;
+            _rig.Rotate("LeftUpperLeg", left, (-0.3f - kick * MathF.Sin(pedal)) * panic);
+            _rig.Rotate("RightUpperLeg", left, (-0.3f + kick * MathF.Sin(pedal)) * panic);
+            _rig.Rotate("LeftLowerLeg", left, (0.55f + 0.4f * ramp * MathF.Max(0f, MathF.Cos(pedal))) * panic);
+            _rig.Rotate("RightLowerLeg", left, (0.55f + 0.4f * ramp * MathF.Max(0f, -MathF.Cos(pedal))) * panic);
+            _rig.Rotate("Spine", left, -0.12f * panic);
+            Head(-0.12f * panic, 0f, 0.1f * MathF.Sin(_fallTime * 6f) * ramp * panic);
+        }
+
+        // Jumping down on purpose: feet together and first, arms out for balance,
+        // eyes on the landing spot.
+        float brace = w * _brace;
+        if (brace > 0.001f)
+        {
+            Arm(1, 0f, 0.35f, 0.3f, 0f, 0f, brace);
+            Arm(-1, 0f, 0.35f, 0.3f, 0f, 0f, brace);
+            _rig.Rotate("LeftUpperLeg", left, -0.25f * brace);
+            _rig.Rotate("RightUpperLeg", left, -0.2f * brace);
+            _rig.Rotate("LeftLowerLeg", left, 0.4f * brace);
+            _rig.Rotate("RightLowerLeg", left, 0.35f * brace);
+            _rig.Rotate("LeftFoot", left, 0.25f * brace);
+            _rig.Rotate("RightFoot", left, 0.25f * brace);
+            _rig.Rotate("Spine", left, 0.12f * brace);
+            Head(0.25f * brace, 0f, 0f);
+        }
     }
 
     private void PoseLanding()
@@ -342,19 +408,24 @@ public sealed partial class ProceduralAnimator : IPerformer
         if (w <= 0.001f)
             return;
         var left = _rig.Left;
-        // On its bottom with the legs out in front, leaning back on the hands; a
-        // little bounce on impact, then shaking the head as if dazed.
+        // Plopped down on its bottom, the pelvis tipped back: one leg out flat on the
+        // ground, the other knee up, leaning back on the hands; a little bounce on
+        // impact, then shaking the head as if dazed. (The legs are set relative to the
+        // tipped pelvis so the feet stay on the ground instead of sinking through it.)
         float bounce = MathF.Exp(-_tumbleTime * 9f) * MathF.Sin(_tumbleTime * 30f);
         _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * (0.88f - 0.06f * bounce) * w));
-        _rig.Rotate("LeftUpperLeg", left, -1.25f * w);
-        _rig.Rotate("RightUpperLeg", left, -1.1f * w);
-        _rig.Rotate("LeftLowerLeg", left, 0.25f * w);
-        _rig.Rotate("RightLowerLeg", left, 0.55f * w);
-        _rig.Rotate("LeftUpperLeg", _rig.Forward, -0.2f * w);
-        _rig.Rotate("RightUpperLeg", _rig.Forward, 0.2f * w);
-        _rig.Rotate("Spine", left, (-0.3f + 0.15f * bounce) * w);
-        _rig.Rotate("LeftUpperArm", left, 0.55f * w);
-        _rig.Rotate("RightUpperArm", left, 0.55f * w);
+        _rig.Rotate("Hips", left, -0.3f * w);
+        _rig.Rotate("LeftUpperLeg", left, -1.27f * w);
+        _rig.Rotate("LeftLowerLeg", left, 0.05f * w);
+        _rig.Rotate("LeftFoot", left, 0.4f * w);
+        _rig.Rotate("RightUpperLeg", left, -1.8f * w);
+        _rig.Rotate("RightLowerLeg", left, 1.0f * w);
+        _rig.Rotate("RightFoot", left, 0.6f * w);
+        _rig.Rotate("LeftUpperLeg", _rig.Forward, -0.15f * w);
+        _rig.Rotate("RightUpperLeg", _rig.Forward, 0.12f * w);
+        _rig.Rotate("Spine", left, (0.05f + 0.15f * bounce) * w);
+        _rig.Rotate("LeftUpperArm", left, 0.2f * w);
+        _rig.Rotate("RightUpperArm", left, 0.2f * w);
         _rig.Rotate("LeftUpperArm", _rig.Forward, -0.25f * w);
         _rig.Rotate("RightUpperArm", _rig.Forward, 0.25f * w);
         float daze = MathF.Sin(_tumbleTime * 9f) * MathF.Exp(-_tumbleTime * 1.2f);
@@ -402,7 +473,7 @@ public sealed partial class ProceduralAnimator : IPerformer
         float mood = MathF.Max(_emotionLevel, MathF.Max(_pet, _petBody));
         float closed = MathF.Max(MathF.Max(_lie, _pet * 0.85f), 0.5f * _sprawl);
         _expressions.Set("blink", MathF.Max(MathF.Sin(_blink / 0.16f * MathF.PI), closed));
-        _expressions.Set("happy", (0.25f * _idle + 0.15f * _walk + 0.35f * _sit + 0.3f * _jump) * (1f - mood));
+        _expressions.Set("happy", (0.25f * _idle + 0.15f * _walk + 0.35f * _sit + 0.3f * _jump + 0.3f * _floorSit + 0.8f * _dance) * (1f - mood));
         SetMood(_emotion, _emotionLevel);
         if (_pet > 0.01f)
         {
@@ -420,7 +491,7 @@ public sealed partial class ProceduralAnimator : IPerformer
         if (_gesture?.Cue.Gesture == Gesture.Yawn)
             _expressions.Set("oh", 0.9f * MathF.Sin(MathF.PI * _gesture.Phase));
         UpdateMouth(dt);
-        float startled = 0.7f * MathF.Max(_drag, _fall);
+        float startled = 0.7f * MathF.Max(_drag, _fall * (1f - _brace));
         // Eyes squeezed shut and a pained face for a moment after a hard landing.
         if (_tumble > 0.01f)
         {
@@ -486,7 +557,7 @@ public sealed partial class ProceduralAnimator : IPerformer
 
     private void UpdateFidgets(float dt, MascotState state)
     {
-        bool calm = state is MascotState.Idle or MascotState.Sit or MascotState.Cling;
+        bool calm = state is MascotState.Idle or MascotState.Sit or MascotState.Cling or MascotState.FloorSit;
         if (!Fidgets || !calm || _gesture != null || Talking || Petted || _emotionLevel > 0.3f)
         {
             _fidgetTimer = MathF.Max(_fidgetTimer, 2.5f);
@@ -495,12 +566,17 @@ public sealed partial class ProceduralAnimator : IPerformer
         _fidgetTimer -= dt;
         if (_fidgetTimer > 0f)
             return;
-        _fidgetTimer = 5f + 7f * (float)_random.NextDouble();
+        _fidgetTimer = 3.5f + 5f * (float)_random.NextDouble();
         Gesture[] options = state switch
         {
             MascotState.Sit => new[] { Gesture.KickLegs, Gesture.KickLegs, Gesture.LookAround, Gesture.FixHair, Gesture.Yawn, Gesture.Stretch },
+            MascotState.FloorSit => new[] { Gesture.LookAround, Gesture.Tilt, Gesture.Yawn, Gesture.Sigh },
             MascotState.Cling => new[] { Gesture.LookAround },
-            _ => new[] { Gesture.Stretch, Gesture.LookAround, Gesture.FixHair, Gesture.Yawn, Gesture.ShiftWeight, Gesture.ShiftWeight, Gesture.Tilt },
+            _ => new[]
+            {
+                Gesture.Stretch, Gesture.LookAround, Gesture.FixHair, Gesture.Yawn, Gesture.ShiftWeight, Gesture.ShiftWeight, Gesture.Tilt,
+                Gesture.Hop, Gesture.Wave, Gesture.Think,
+            },
         };
         var pick = options[_random.Next(options.Length)];
         if (pick == _lastFidget && options.Length > 1)
@@ -545,7 +621,7 @@ public sealed partial class ProceduralAnimator : IPerformer
         var left = _rig.Left;
         // Flat on its face, arms flung forward; a bounce on impact, then a feeble kick.
         float bounce = MathF.Exp(-_sprawlTime * 8f) * MathF.Sin(_sprawlTime * 26f);
-        _rig.OffsetHips(_rig.Up * (-(_rig.HipHeight - (0.16f + 0.03f * bounce) * _rig.Height) * w));
+        _rig.OffsetHips(_rig.Up * (-(_rig.HipHeight - (0.095f + 0.03f * bounce) * _rig.Height) * w));
         _rig.Rotate("Hips", left, MathF.PI / 2f * w);
         _rig.Rotate("Spine", left, -0.08f * w);
         Arm(1, 0.35f, 2.75f, 0.2f, -0.2f, 0f, w);
@@ -575,6 +651,66 @@ public sealed partial class ProceduralAnimator : IPerformer
         Arm(1, 0f, 0.6f, 0.6f, 0.2f, 0f, w);
         Arm(-1, 0.2f, 0.3f, 0.3f, 0f, 0f, w);
         _rig.Rotate("Head", left, -0.2f * w);
+    }
+
+    private void PoseFloorSit()
+    {
+        float w = _floorSit;
+        if (w <= 0.001f)
+            return;
+        var left = _rig.Left;
+        var f = _rig.Forward;
+        // On the ground hugging its knees, feet flat in front, rocking gently.
+        float rock = MathF.Sin(_time * 1.5f);
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * 0.9f * w));
+        _rig.Rotate("Hips", left, (-0.15f + 0.04f * rock) * w);
+        _rig.Rotate("LeftUpperLeg", left, -2.35f * w);
+        _rig.Rotate("RightUpperLeg", left, -2.35f * w);
+        _rig.Rotate("LeftLowerLeg", left, 1.65f * w);
+        _rig.Rotate("RightLowerLeg", left, 1.65f * w);
+        _rig.Rotate("LeftFoot", left, 0.8f * w);
+        _rig.Rotate("RightFoot", left, 0.8f * w);
+        _rig.Rotate("LeftUpperLeg", f, -0.08f * w);
+        _rig.Rotate("RightUpperLeg", f, 0.08f * w);
+        _rig.Rotate("Spine", left, 0.28f * w);
+        _rig.Rotate("Chest", left, 0.08f * w);
+        Arm(1, 0f, 1.15f, 1.0f, 0.4f, 0f, w);
+        Arm(-1, 0f, 1.15f, 1.0f, 0.4f, 0f, w);
+        Head(-0.15f * w, 0f, 0.08f * MathF.Sin(_time * 0.8f) * w);
+    }
+
+    private void PoseDance()
+    {
+        float w = _dance;
+        if (w <= 0.001f)
+            return;
+        var left = _rig.Left;
+        var up = _rig.Up;
+        var f = _rig.Forward;
+        // Two beats a second: knees bounce on every beat, hips sway every other one.
+        float b = _danceTime * Mathf.Tau;
+        float beat = 0.5f - 0.5f * MathF.Cos(2f * b);
+        float sway = MathF.Sin(b);
+        _rig.OffsetHips(up * (-0.035f * _legScale * beat * w) + left * (0.03f * _legScale * sway * w));
+        _rig.Rotate("Hips", f, 0.09f * sway * w);
+        _rig.Rotate("Spine", f, -0.12f * sway * w);
+        _rig.Rotate("LeftUpperLeg", left, -0.2f * beat * w);
+        _rig.Rotate("RightUpperLeg", left, -0.2f * beat * w);
+        _rig.Rotate("LeftLowerLeg", left, 0.4f * beat * w);
+        _rig.Rotate("RightLowerLeg", left, 0.4f * beat * w);
+        _rig.Rotate("LeftFoot", left, -0.2f * beat * w);
+        _rig.Rotate("RightFoot", left, -0.2f * beat * w);
+
+        // Two arm moves blended in and out over eight seconds: fists pumping in turn,
+        // then both arms up swaying overhead.
+        float move = 0.5f - 0.5f * MathF.Cos(_danceTime * Mathf.Tau / 8f);
+        float pump = (1f - move) * w;
+        Arm(1, 0.25f, 0.55f + 0.45f * MathF.Max(0f, sway), 1.5f, 0.1f, 0f, pump);
+        Arm(-1, 0.25f, 0.55f + 0.45f * MathF.Max(0f, -sway), 1.5f, 0.1f, 0f, pump);
+        float overhead = move * w;
+        Arm(1, 2.3f + 0.25f * sway, 0.2f, 0.35f, 0f, 0f, overhead);
+        Arm(-1, 2.3f - 0.25f * sway, 0.2f, 0.35f, 0f, 0f, overhead);
+        Head(0.08f * beat * w, 0.1f * sway * w, -0.15f * sway * w);
     }
 
     private void PosePetting()

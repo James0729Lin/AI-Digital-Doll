@@ -190,7 +190,7 @@ public partial class MascotRoot : Node3D
         if (_brain.State == MascotState.Idle && _snapshot == null && !FaceUser)
             AimHeadAtCursor();
         _animator.Update(dt, _brain.State, _brain.VelocityX / _pixelsPerMetre, _dragVelocity.X / _pixelsPerMetre,
-            _brain.State == MascotState.Climb ? _brain.VelocityY / _pixelsPerMetre : 0f, _brain.Running);
+            _brain.State == MascotState.Climb ? _brain.VelocityY / _pixelsPerMetre : 0f, _brain.Running, _brain.ControlledFall);
 
         if (_snapshot == null)
         {
@@ -505,6 +505,9 @@ public partial class MascotRoot : Node3D
 
         var expressions = ExpressionRig.Create(model);
         var animator = new ProceduralAnimator(rig, expressions, _random);
+        // VRM models carry spring bone settings on their root (vrm_toplevel.gd).
+        if (model.Get("springbone_add_force").VariantType == Variant.Type.Vector3)
+            animator.Springs = model;
         GD.Print($"Loaded {label}: expressions [{string.Join(", ", expressions.Names)}]");
 
         // Turn the model so that its forward axis matches the pivot's +Z (toward the camera).

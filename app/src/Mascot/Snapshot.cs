@@ -124,17 +124,35 @@ internal sealed class Snapshot
                 brain.EndDrag(0f, 0f);
                 break;
             case "sit":
-                // A ledge in the middle of the frame so the dangling legs are visible.
+                // A ledge (a window top, not the floor, where it would sit on the ground) in
+                // the middle of the frame so the dangling legs are visible.
                 float ledge = window.Y * 0.62f;
                 brain.SetSurroundings(new Surroundings(window.X, window.Y,
-                    new[] { new DigitalDoll.Core.Mascot.Platform(Surroundings.FloorId, 0f, window.X, ledge) }, Array.Empty<Wall>()));
-                brain.PlaceAt(centre);
+                    new[]
+                    {
+                        new DigitalDoll.Core.Mascot.Platform(Surroundings.FloorId, 0f, window.X, window.Y - 1f),
+                        new DigitalDoll.Core.Mascot.Platform(1, 0f, window.X, ledge),
+                    }, Array.Empty<Wall>()));
+                brain.BeginDrag();
+                brain.DragTo(centre, ledge - 1f);
+                brain.EndDrag(0f, 0f);
+                for (int i = 0; i < 60 && brain.State == MascotState.Falling; i++)
+                    brain.Update(1f / 60f);
                 brain.SitDown();
                 break;
             case "lie":
             case "sprawl":
             case "getup":
-                brain.Preview(_pose switch { "lie" => MascotState.Lie, "sprawl" => MascotState.Sprawl, _ => MascotState.GetUp });
+            case "floorsit":
+            case "dance":
+                brain.Preview(_pose switch
+                {
+                    "lie" => MascotState.Lie,
+                    "sprawl" => MascotState.Sprawl,
+                    "floorsit" => MascotState.FloorSit,
+                    "dance" => MascotState.Dance,
+                    _ => MascotState.GetUp,
+                });
                 break;
             case "land":
                 brain.BeginDrag();

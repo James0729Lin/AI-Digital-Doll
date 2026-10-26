@@ -63,7 +63,8 @@ public sealed class AnimalAnimator : IPerformer
     private ActiveGesture? _gesture, _fading;
 
     private float _time, _phase, _climbPhase;
-    private float _idle = 1f, _walk, _run, _sit, _lie, _sprawl, _getUp, _tumble, _drag, _fall, _land, _jump, _climb;
+    private float _idle = 1f, _walk, _run, _sit, _lie, _sprawl, _getUp, _tumble, _drag, _fall, _land, _jump, _climb, _dance;
+    private bool _dancing;
     private float _pet, _petBody, _talk;
     private float _stateTime;
     private MascotState _state;
@@ -135,13 +136,21 @@ public sealed class AnimalAnimator : IPerformer
         _emotionHold = seconds;
     }
 
-    public void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false)
+    public void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false,
+        bool bracing = false)
     {
+        // Animals sit on their haunches wherever they are, and dance by bobbing about.
+        if (state == MascotState.FloorSit)
+            state = MascotState.Sit;
+        _dancing = state == MascotState.Dance;
+        if (_dancing)
+            state = MascotState.Idle;
         _time += dt;
         _stateTime = state == _state ? _stateTime + dt : 0f;
         _state = state;
         Ease(ref _idle, state == MascotState.Idle ? 1f : 0f, dt);
         Ease(ref _walk, state == MascotState.Walk ? 1f : 0f, dt);
+        Ease(ref _dance, _dancing ? 1f : 0f, dt, 6f);
         Ease(ref _run, running ? 1f : 0f, dt, 6f);
         Ease(ref _sit, state == MascotState.Sit ? 1f : 0f, dt, 6f);
         Ease(ref _lie, state == MascotState.Lie ? 1f : 0f, dt, 3f);
@@ -175,6 +184,7 @@ public sealed class AnimalAnimator : IPerformer
         _p.Clear();
         PoseRest();
         PoseIdle();
+        PoseDance();
         PoseWalk();
         PoseRun();
         PoseSit();
@@ -232,6 +242,17 @@ public sealed class AnimalAnimator : IPerformer
             _p.HeadYaw += 0.25f * MathF.Sin(_time * 0.9f) * MathF.Sin(_time * 2.3f) * w;
             _p.HeadForward += 0.008f * MathF.Max(0f, MathF.Sin(_time * 3.1f)) * w;
         }
+    }
+
+    private void PoseDance()
+    {
+        float w = _dance;
+        if (w <= 0.001f)
+            return;
+        float b = _time * Mathf.Tau;
+        _p.BodyY += -0.03f * _rig.LegLength * (0.5f - 0.5f * MathF.Cos(2f * b)) * w;
+        _p.HeadYaw += 0.2f * MathF.Sin(b) * w;
+        _p.TailWag += 0.8f * MathF.Sin(2f * b) * w;
     }
 
     private void PoseWalk()

@@ -17,7 +17,9 @@ public interface IPerformer
     TouchZone PetZone { get; set; }
     Gesture? CurrentGesture { get; }
 
-    void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false);
+    /// <param name="bracing">Falling on purpose (feet first) rather than thrown or knocked off.</param>
+    void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false,
+        bool bracing = false);
     void Play(GestureCue cue, bool now = false);
     void StopGestures();
     void Feel(Emotion emotion, float intensity, float seconds = 4f);
@@ -100,7 +102,9 @@ public sealed class HumanBody : IMascotBody
         MascotState.Falling or MascotState.Jump => facing * FacingTurn * 0.6f,
         // Side on to the screen edge it is climbing.
         MascotState.Climb or MascotState.Cling => wallSide * Mathf.Pi / 2f,
-        MascotState.Dragged or MascotState.Sit or MascotState.Tumble or MascotState.Lie => 0f,
+        MascotState.Dragged or MascotState.Sit or MascotState.Lie or MascotState.Dance => 0f,
+        // Three-quarters on, so the legs read instead of pointing at the viewer.
+        MascotState.Tumble or MascotState.FloorSit => facing * 0.65f,
         // Flat on its face: seen from the side.
         MascotState.Sprawl => facing * Mathf.Pi / 2f,
         MascotState.GetUp => facing * 0.5f,
