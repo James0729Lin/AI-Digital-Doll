@@ -107,9 +107,12 @@ public sealed partial class ProceduralAnimator : IPerformer
         if (state == MascotState.Lie && _state != MascotState.Lie)
             _lieSide = _random.Next(2) == 0 ? -1 : 1;
         _state = state;
-        Ease(ref _lie, state == MascotState.Lie ? 1f : 0f, dt, state == MascotState.Lie ? 2.2f : 3.5f);
-        Ease(ref _sprawl, state == MascotState.Sprawl ? 1f : 0f, dt, state == MascotState.Sprawl ? 16f : 3.5f);
-        Ease(ref _getUp, state == MascotState.GetUp ? 1f : 0f, dt, 5f);
+        // Lying down goes by way of one knee, as a person would: kneel first, then settle
+        // onto the side. Getting up leaves the side quickly for the knee, then stands.
+        bool settling = state == MascotState.Lie && _lieTime < 0.55f;
+        Ease(ref _lie, state == MascotState.Lie && !settling ? 1f : 0f, dt, state == MascotState.Lie ? 3f : 6f);
+        Ease(ref _sprawl, state == MascotState.Sprawl ? 1f : 0f, dt, state == MascotState.Sprawl ? 16f : 6f);
+        Ease(ref _getUp, state == MascotState.GetUp || settling ? 1f : 0f, dt, settling ? 7f : 5f);
         Ease(ref _run, running ? 1f : 0f, dt, 6f);
         Ease(ref _pet, Petted && PetZone == TouchZone.Head ? 1f : 0f, dt, 5f);
         Ease(ref _petBody, Petted && PetZone == TouchZone.Body ? 1f : 0f, dt, 5f);

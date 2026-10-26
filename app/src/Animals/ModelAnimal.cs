@@ -432,9 +432,11 @@ public sealed class ModelAnimalPerformer : IPerformer
         pitch += 0.15f * _slip;
         roll += 0.15f * MathF.Sin(_time * 3.4f) * _hang;
 
-        // Lying on its side, or flat on its face after a long fall.
-        roll += _lieSide * MathF.PI / 2f * 0.92f * _lie;
-        offset.Y += (width * 0.5f - h * 0.05f) * _lie - h * 0.02f * _lie;
+        // Lying down: settled on its belly, squashed low with a slight lean to one side
+        // (rolling the whole model onto its side sank it through the floor on the way);
+        // or flat on its face after a long fall.
+        roll += _lieSide * 0.18f * _lie;
+        squash += -0.28f * _lie;
         pitch += MathF.PI / 2f * 0.85f * _sprawl;
         offset.Y += depth * 0.35f * _sprawl;
         // Sitting back on its rump; dazed on its bottom after a hard landing.

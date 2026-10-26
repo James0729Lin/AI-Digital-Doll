@@ -18,6 +18,11 @@ namespace DigitalDoll.Mascot;
 /// Desktop mode: a transparent, always-on-top window covering the usable area of a
 /// screen, with the character standing on the taskbar. Only the area around the
 /// character receives the mouse; everything else passes through to the desktop.
+/// On Windows the whole window is switched between taking the mouse and letting it
+/// through (a layered, click-through window) as the cursor moves over the character
+/// or away. Shaping the window to the character instead (Godot's mouse passthrough
+/// polygon) made Windows show stale, never-drawn pixels for a frame wherever the shape
+/// grew, so a moving character flickered with odd colours around it.
 /// </summary>
 public partial class MascotRoot : Node3D
 {
@@ -70,6 +75,7 @@ public partial class MascotRoot : Node3D
     private float _screenCheck;
     private float _windowsCheck;
     private Vector2[] _region = Array.Empty<Vector2>();
+    private bool? _clickThrough;
 
     private bool _dragging;
     private bool _pressed;
@@ -300,7 +306,8 @@ public partial class MascotRoot : Node3D
         _dragVelocity = Vector2.Zero;
         _brain.BeginDrag();
         _animator?.StopGestures();
-        SetMousePassthrough(Array.Empty<Vector2>());
+        if (_clickThrough == null)
+            SetMousePassthrough(Array.Empty<Vector2>());
     }
 
     private TouchZone ZoneAt(Vector2 cursor)
@@ -634,19 +641,24 @@ public partial class MascotRoot : Node3D
 
     private void UpdateHitRegion()
     {
-        if (_dragging || _body == null)
+        if (_body == null)
+            return;
+        if (!_dragging)
+            _tight = _body.Outline(_camera, HitMargin);
+        // Windows: take the mouse while it is over the character (or holding it), let it
+        // through everywhere else; the window keeps its full shape, so nothing flickers.
+        var cursor = CursorInWindow();
+        bool over = _dragging || _pressed || (_tight.Length >= 3 && Geometry2D.IsPointInPolygon(cursor, _tight));
+        if (_clickThrough != !over && WindowsNative.SetClickThrough(DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle), !over))
+            _clickThrough = !over;
+        if (_clickThrough != null || _dragging)
             return;
 
-        var tight = _body.Outline(_camera, HitMargin);
-        _tight = tight;
-        if (_region.Length >= 3 && Array.TrueForAll(tight, p => Geometry2D.IsPointInPolygon(p, _region)))
+        // Elsewhere (the Linux smoke test): shape the window's mouse region to the character.
+        if (_region.Length >= 3 && Array.TrueForAll(_tight, p => Geometry2D.IsPointInPolygon(p, _region)))
             return;
-
         // Slack so a breathing or walking character does not need a new window region
-        // (an expensive call on Windows) every frame. Windows applies a new region a
-        // frame or two after the frame it was computed for, and pixels outside the
-        // region are not drawn, so a fast fall or jump needs room for ~0.1 s of travel
-        // or its leading edge is cut off.
+        // every frame; a fast fall or jump needs room for ~0.1 s of travel.
         var brain = _brain!;
         float speed = new Vector2(brain.VelocityX, brain.VelocityY).Length();
         float slack = HitSlack + speed * LeadSeconds;
