@@ -153,8 +153,10 @@ public sealed class AnimalAnimator : IPerformer
         Ease(ref _walk, state == MascotState.Walk ? 1f : 0f, dt);
         Ease(ref _dance, _dancing ? 1f : 0f, dt, 6f);
         Ease(ref _run, running ? 1f : 0f, dt, 6f);
-        Ease(ref _sit, state == MascotState.Sit ? 1f : 0f, dt, 6f);
-        Ease(ref _lie, state == MascotState.Lie ? 1f : 0f, dt, 3f);
+        // Lying down by way of sitting, as a cat does: rump down first, then the front.
+        bool settling = state == MascotState.Lie && _stateTime < 0.5f;
+        Ease(ref _sit, state == MascotState.Sit || settling ? 1f : 0f, dt, 6f);
+        Ease(ref _lie, state == MascotState.Lie && !settling ? 1f : 0f, dt, state == MascotState.Lie ? 3.5f : 5f);
         Ease(ref _sprawl, state == MascotState.Sprawl ? 1f : 0f, dt, state == MascotState.Sprawl ? 16f : 4f);
         Ease(ref _getUp, state == MascotState.GetUp ? 1f : 0f, dt, 6f);
         Ease(ref _tumble, state == MascotState.Tumble ? 1f : 0f, dt, state == MascotState.Tumble ? 14f : 4f);

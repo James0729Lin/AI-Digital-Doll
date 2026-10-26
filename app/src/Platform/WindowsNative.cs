@@ -12,6 +12,9 @@ public static class WindowsNative
     private const int GwlExStyle = -20;
     private const long WsExToolWindow = 0x00000080;
     private const long WsExAppWindow = 0x00040000;
+    private const long WsExLayered = 0x00080000;
+    private const long WsExTransparent = 0x00000020;
+    private const uint LwaAlpha = 0x2;
     private const int SwHide = 0;
     private const int SwShowNoActivate = 4;
     private const int SwShow = 5;
@@ -45,6 +48,38 @@ public static class WindowsNative
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
             GD.PushWarning($"Could not change the taskbar style: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Lets mouse clicks fall through the whole window to whatever is underneath, other
+    /// programs included (a layered, transparent window), or takes them again. Godot's own
+    /// mouse passthrough only hands clicks on to the same program's windows. Returns false
+    /// when not on Windows or the call failed.
+    /// </summary>
+    public static bool SetClickThrough(long hwnd, bool through)
+    {
+        if (!IsWindows || hwnd == 0)
+            return false;
+        try
+        {
+            var handle = new IntPtr(hwnd);
+            long style = GetWindowLongPtrW(handle, GwlExStyle).ToInt64();
+            long updated = (through ? style | WsExTransparent : style & ~WsExTransparent) | WsExLayered;
+            if (updated != style)
+            {
+                SetWindowLongPtrW(handle, GwlExStyle, new IntPtr(updated));
+                // A layered window shows nothing until it is given an opacity; fully opaque
+                // keeps the rendered per-pixel transparency as it is.
+                if ((style & WsExLayered) == 0)
+                    SetLayeredWindowAttributes(handle, 0, 255, LwaAlpha);
+            }
+            return true;
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            GD.PushWarning($"Could not change click-through: {e.Message}");
+            return false;
         }
     }
 
@@ -139,4 +174,8 @@ public static class WindowsNative
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint key, byte alpha, uint flags);
 }
