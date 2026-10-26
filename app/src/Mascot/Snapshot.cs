@@ -32,6 +32,9 @@ internal sealed class Snapshot
     /// <summary>Set by <c>--animal cat|dog|chicken|pig</c>.</summary>
     public Species? Animal { get; private set; }
 
+    /// <summary>Set by <c>--style classic|cube|lowpoly</c> (the animal's version).</summary>
+    public AnimalStyle AnimalStyle { get; private set; }
+
     /// <summary>Set by <c>--body</c>: show an edited body (adjusted with <c>--set key=value</c>).</summary>
     public BodyShape? Body { get; private set; }
 
@@ -76,6 +79,9 @@ internal sealed class Snapshot
                 case "--animal":
                     snapshot.Animal = Enum.Parse<Species>(value, ignoreCase: true);
                     break;
+                case "--style":
+                    snapshot.AnimalStyle = Enum.Parse<AnimalStyle>(value, ignoreCase: true);
+                    break;
                 case "--character":
                     snapshot.CharacterPath = value;
                     break;
@@ -113,10 +119,15 @@ internal sealed class Snapshot
                 brain.EndDrag(0f, 0f);
                 break;
             case "climb":
+            case "slip":
+            case "hang":
                 brain.BeginDrag();
                 brain.DragTo(4f, window.Y * 0.9f);
                 brain.EndDrag(0f, 0f);
                 brain.ClimbTo(window.Y * 0.2f);
+                // A slip lasts 0.45 s: "slip" is shot during it, "hang" just after.
+                if (_pose != "climb")
+                    brain.Slip();
                 break;
             case "tumble":
                 brain.BeginDrag();

@@ -190,6 +190,67 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void ClimbsUpInBurstsNotAtASteadySpeed()
+    {
+        var brain = Create(surroundings: Screen());
+        brain.BeginDrag();
+        brain.DragTo(10f, 900f);
+        brain.EndDrag(0f, 0f);
+        brain.ClimbTo(100f);
+        var speeds = new List<float>();
+        for (int i = 0; i < 60 * 3; i++)
+        {
+            brain.Update(1f / 60f);
+            if (brain.State == MascotState.Climb && brain.Grip == ClimbGrip.Steady)
+                speeds.Add(-brain.VelocityY);
+        }
+        Assert.True(speeds.Max() > Tuning.ClimbSpeed * 1.8f, "a heave should be fast");
+        Assert.True(speeds.Min() < Tuning.ClimbSpeed * 0.5f, "between heaves it should almost stop");
+    }
+
+    [Fact]
+    public void SlipsDownThenHangsOnAndClimbsOn()
+    {
+        var brain = Create();
+        brain.BeginDrag();
+        brain.DragTo(10f, 600f);
+        brain.EndDrag(0f, 0f);
+        brain.ClimbTo(100f);
+        Run(brain, 0.5f);
+        float y = brain.Y;
+        brain.Slip();
+        Assert.Equal(ClimbGrip.Slipping, brain.Grip);
+        Run(brain, 0.5f);
+        Assert.True(brain.Y > y, "it should slide down");
+        Assert.Equal(ClimbGrip.Hanging, brain.Grip);
+        Assert.Equal(MascotState.Climb, brain.State);
+        Assert.Equal(Surroundings.LeftWallId, brain.WallId);
+        Run(brain, 1.5f);
+        Assert.Equal(ClimbGrip.Steady, brain.Grip);
+    }
+
+    [Fact]
+    public void SlipsNowAndThenWhileClimbingButNeverOffTheWall()
+    {
+        bool slipped = false;
+        foreach (int seed in new[] { 1, 2, 3, 4 })
+        {
+            var brain = Create(seed);
+            brain.BeginDrag();
+            brain.DragTo(10f, Height - 20f);
+            brain.EndDrag(0f, 0f);
+            brain.ClimbTo(50f);
+            for (int i = 0; i < 60 * 30 && brain.State == MascotState.Climb; i++)
+            {
+                brain.Update(1f / 60f);
+                slipped |= brain.Grip == ClimbGrip.Slipping;
+                Assert.InRange(brain.Y, 0f, Height);
+            }
+        }
+        Assert.True(slipped);
+    }
+
+    [Fact]
     public void SitsOnTheGroundWhenAskedOnTheFloor()
     {
         var brain = Create();

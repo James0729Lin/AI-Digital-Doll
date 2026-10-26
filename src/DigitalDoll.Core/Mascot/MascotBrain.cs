@@ -34,10 +34,30 @@ public enum MascotState
     Dance,
 }
 
+/// <summary>How a climbing mascot is holding on to its wall.</summary>
+public enum ClimbGrip
+{
+    /// <summary>Climbing normally (or not climbing at all).</summary>
+    Steady,
+
+    /// <summary>Lost its grip and sliding down the wall, scrabbling.</summary>
+    Slipping,
+
+    /// <summary>Caught itself after a slip: hanging on for a moment before going on.</summary>
+    Hanging,
+}
+
 public sealed class MascotTuning
 {
     public float WalkSpeed { get; init; } = 90f;
     public float ClimbSpeed { get; init; } = 55f;
+
+    /// <summary>Pull-ups per second while climbing up: it moves in bursts, not at a steady glide.</summary>
+    public float ClimbStrokeRate { get; init; } = 1.3f;
+
+    /// <summary>Chance per second of slipping while climbing up.</summary>
+    public float SlipChance { get; init; } = 0.16f;
+    public float HangSeconds { get; init; } = 0.8f;
     public float Gravity { get; init; } = 2600f;
     public float MaxFallSpeed { get; init; } = 2400f;
     public float MinIdleSeconds { get; init; } = 3f;
@@ -109,6 +129,7 @@ public sealed class MascotBrain
     private float _jumpStartX, _jumpStartY;
     private float _hold;
     private bool _controlledFall;
+    private float _climbStroke, _slipTime, _hangTime;
     private (float X, bool Run)? _afterGetUp;
 
     public MascotBrain(MascotTuning tuning, Random random, float startX, Surroundings surroundings)
@@ -165,6 +186,12 @@ public sealed class MascotBrain
     /// feet first and ready to land, instead of thrown or knocked off.
     /// </summary>
     public bool ControlledFall => State == MascotState.Falling && _controlledFall;
+
+    /// <summary>While climbing: slipping down, hanging on after a slip, or climbing normally.</summary>
+    public ClimbGrip Grip => State != MascotState.Climb ? ClimbGrip.Steady
+        : _slipTime > 0f ? ClimbGrip.Slipping
+        : _hangTime > 0f ? ClimbGrip.Hanging
+        : ClimbGrip.Steady;
 
     /// <summary>Seconds left during which the mascot stays where it is (see <see cref="Hold"/>).</summary>
     public float HoldTime => _hold;
@@ -389,6 +416,16 @@ public sealed class MascotBrain
         _plan = Plan.None;
         EnterWalk(targetX);
         Running = State == MascotState.Walk;
+    }
+
+    /// <summary>Makes a climbing mascot lose its grip and slide down a little (also for previews).</summary>
+    public void Slip()
+    {
+        if (State != MascotState.Climb || _slipTime > 0f)
+            return;
+        _hangTime = 0f;
+        _slipTime = 0.45f;
+        VelocityY = _tuning.ClimbSpeed * 0.5f;
     }
 
     /// <summary>Climbs to <paramref name="y"/> on the wall the mascot is holding on to.</summary>
@@ -713,6 +750,7 @@ public sealed class MascotBrain
         X = wall.X - wall.Side * _tuning.WallOffset;
         TargetY = Math.Clamp(targetY, wall.Top, wall.Bottom);
         VelocityX = 0f;
+        _slipTime = _hangTime = 0f;
         SetState(MascotState.Climb);
     }
 
@@ -732,8 +770,53 @@ public sealed class MascotBrain
 
     private void UpdateClimb(float dt)
     {
+        var holding = _wallId is long holdId ? Surroundings.FindWall(holdId) : null;
+        if (_slipTime > 0f)
+        {
+            // Sliding down, faster and faster, until it catches hold again.
+            _slipTime -= dt;
+            VelocityY = MathF.Min(VelocityY + _tuning.Gravity * 0.35f * dt, _tuning.ClimbSpeed * 4f);
+            Y += VelocityY * dt;
+            if (holding is Wall w)
+                Y = MathF.Min(Y, w.Bottom - 1f);
+            if (_slipTime <= 0f)
+            {
+                _hangTime = _tuning.HangSeconds * Lerp(0.7f, 1.3f, (float)_random.NextDouble());
+                VelocityY = 0f;
+            }
+            return;
+        }
+        if (_hangTime > 0f)
+        {
+            _hangTime -= dt;
+            VelocityY = 0f;
+            return;
+        }
+
         float delta = TargetY - Y;
-        float step = _tuning.ClimbSpeed * dt;
+        float speed;
+        if (delta < 0f)
+        {
+            // Up in pull-ups: a strong heave, then a moment to get a new grip.
+            _climbStroke += dt * MathF.Tau * _tuning.ClimbStrokeRate;
+            float pull = MathF.Max(0f, MathF.Sin(_climbStroke));
+            speed = _tuning.ClimbSpeed * (0.3f + 2.2f * pull * MathF.Sqrt(pull));
+            // Now and then it loses its grip (not right away, and only with room to slide).
+            if (_stateTime > 1f && holding is Wall wall && Y + _tuning.Height * 0.8f < wall.Bottom
+                && _random.NextDouble() < _tuning.SlipChance * dt)
+            {
+                _slipTime = Lerp(0.3f, 0.55f, (float)_random.NextDouble());
+                VelocityY = _tuning.ClimbSpeed * 0.5f;
+                return;
+            }
+        }
+        else
+        {
+            // Down carefully, at an even pace.
+            _climbStroke += dt * MathF.Tau * _tuning.ClimbStrokeRate * 0.7f;
+            speed = _tuning.ClimbSpeed * 0.8f;
+        }
+        float step = speed * dt;
         if (MathF.Abs(delta) <= MathF.Max(step, _tuning.ArriveTolerance))
         {
             Y = TargetY;
@@ -763,7 +846,7 @@ public sealed class MascotBrain
             }
             return;
         }
-        VelocityY = MathF.Sign(delta) * _tuning.ClimbSpeed;
+        VelocityY = MathF.Sign(delta) * speed;
         Y += MathF.Sign(delta) * step;
     }
 

@@ -11,6 +11,8 @@ This project bundles or depends on the following third-party works.
 | Godette (VRM test character) | `app/assets/characters/godette` | CC BY 3.0 | see below |
 | MakeHuman base mesh and targets | `app/assets/body/body.ddbp.gz` (converted) | CC0 1.0 | see below |
 | Noto Sans TC (Regular instance) | `app/assets/fonts` | SIL Open Font License 1.1 | https://github.com/google/fonts/tree/main/ofl/notosanstc |
+| Cube Pets 2.0 by Kenney (cat, dog, chick, pig) | `app/assets/animals/cube` | CC0 1.0 | https://kenney.nl/assets/cube-pets |
+| Animal Pack Vol.2 by Quaternius (cat, dog) | `app/assets/animals/lowpoly` | CC0 1.0 | https://opengameart.org/content/animated-animales-low-poly |
 
 ## Godette
 

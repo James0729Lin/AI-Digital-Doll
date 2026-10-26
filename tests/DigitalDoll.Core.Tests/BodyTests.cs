@@ -421,6 +421,17 @@ public class AppSettingsTests
         Assert.Equal(CharacterSource.Body, AppSettings.FromJson(settings.ToJson()).Character);
     }
 
+    [Fact]
+    public void RoundTripsTheAnimalVersion()
+    {
+        var settings = new AppSettings { Character = CharacterSource.Animal, Animal = Species.Dog, AnimalStyle = AnimalStyle.LowPoly };
+        var back = AppSettings.FromJson(settings.ToJson());
+        Assert.Equal(Species.Dog, back.Animal);
+        Assert.Equal(AnimalStyle.LowPoly, back.AnimalStyle);
+        // Settings saved before versions existed keep the original animals.
+        Assert.Equal(AnimalStyle.Classic, AppSettings.FromJson("{\"character\":\"animal\",\"animal\":\"cat\"}").AnimalStyle);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

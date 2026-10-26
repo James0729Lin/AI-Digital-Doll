@@ -40,7 +40,7 @@ public sealed partial class ProceduralAnimator : IPerformer
     private readonly PerformanceDirector _fidgetDirector;
     private float _fidgetTimer = 6f;
     private MascotState _state;
-    private float _climbPhase;
+    private float _climbPhase, _climbUp, _slip, _hang;
     private float _dangle, _dangleVelocity;
     private float _lookYaw, _lookPitch;
     private float _nextBlink = 2f, _blink;
@@ -96,7 +96,7 @@ public sealed partial class ProceduralAnimator : IPerformer
     public float LookPitch { get; set; }
 
     public void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false,
-        bool bracing = false)
+        bool bracing = false, ClimbGrip grip = ClimbGrip.Steady)
     {
         _time += dt;
         Ease(ref _floorSit, state == MascotState.FloorSit ? 1f : 0f, dt, 5f);
@@ -125,7 +125,12 @@ public sealed partial class ProceduralAnimator : IPerformer
         Ease(ref _tumble, state == MascotState.Tumble ? 1f : 0f, dt, state == MascotState.Tumble ? 18f : 4f);
         _tumbleTime = state == MascotState.Tumble ? _tumbleTime + dt : 0f;
         // Hand over hand: one full cycle per ~0.55 character-heights climbed.
-        _climbPhase = (_climbPhase + dt * Mathf.Tau * MathF.Abs(climbSpeedMetres) / (0.55f * _rig.Height)) % Mathf.Tau;
+        // Limbs move with the climb (fast during a heave, still between them); held while slipping.
+        if (grip == ClimbGrip.Steady)
+            _climbPhase = (_climbPhase + dt * Mathf.Tau * MathF.Abs(climbSpeedMetres) / (0.55f * _rig.Height)) % Mathf.Tau;
+        Ease(ref _slip, state == MascotState.Climb && grip == ClimbGrip.Slipping ? 1f : 0f, dt, 16f);
+        Ease(ref _hang, state == MascotState.Climb && grip == ClimbGrip.Hanging ? 1f : 0f, dt, 7f);
+        Ease(ref _climbUp, state == MascotState.Climb && grip == ClimbGrip.Steady && climbSpeedMetres < 0f ? 1f : 0f, dt, 4f);
         Ease(ref _idle, state == MascotState.Idle ? 1f : 0f, dt);
         Ease(ref _walk, state == MascotState.Walk ? 1f : 0f, dt);
         Ease(ref _drag, state == MascotState.Dragged ? 1f : 0f, dt);
@@ -348,18 +353,60 @@ public sealed partial class ProceduralAnimator : IPerformer
         if (w <= 0.001f)
             return;
         var left = _rig.Left;
+        var f = _rig.Forward;
         float s = MathF.Sin(_climbPhase);
-        // Arms reach up the wall in turns; the opposite knee lifts with each reach.
-        _rig.Rotate("LeftUpperArm", left, -(2.45f + 0.35f * s) * w);
-        _rig.Rotate("RightUpperArm", left, -(2.45f - 0.35f * s) * w);
-        _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, (0.55f - 0.3f * s) * w);
-        _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, (0.55f + 0.3f * s) * w);
-        _rig.Rotate("LeftUpperLeg", left, -(0.55f - 0.4f * s) * w);
-        _rig.Rotate("RightUpperLeg", left, -(0.55f + 0.4f * s) * w);
-        _rig.Rotate("LeftLowerLeg", left, (1.0f - 0.35f * s) * w);
-        _rig.Rotate("RightLowerLeg", left, (1.0f + 0.35f * s) * w);
-        _rig.Rotate("Spine", left, 0.12f * w);
-        _rig.Rotate("Head", left, -0.3f * w);
+        // Hand over hand: an arm reaches high while the opposite knee comes up for the next
+        // step; going up, each heave sways the hips and curls the body in to the wall.
+        float steady = w * (1f - MathF.Max(_slip, _hang));
+        float heave = MathF.Max(0f, s) * _climbUp;
+        _rig.Rotate("LeftUpperArm", left, -(2.45f + 0.5f * s) * steady);
+        _rig.Rotate("RightUpperArm", left, -(2.45f - 0.5f * s) * steady);
+        _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, (0.6f - 0.45f * s) * steady);
+        _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, (0.6f + 0.45f * s) * steady);
+        _rig.Rotate("LeftUpperLeg", left, -(0.6f - 0.5f * s) * steady);
+        _rig.Rotate("RightUpperLeg", left, -(0.6f + 0.5f * s) * steady);
+        _rig.Rotate("LeftLowerLeg", left, (1.05f - 0.45f * s) * steady);
+        _rig.Rotate("RightLowerLeg", left, (1.05f + 0.45f * s) * steady);
+        _rig.Rotate("Hips", f, 0.1f * s * _climbUp * steady);
+        _rig.Rotate("Spine", f, -0.08f * s * _climbUp * steady);
+        _rig.Rotate("Spine", left, (0.12f + 0.12f * heave) * steady);
+        Head(-(0.3f + 0.12f * heave) * steady, 0f, 0.06f * s * _climbUp * steady);
+
+        // Slipping: both hands clawing at the wall overhead, legs scrabbling for a hold,
+        // leaning back as it slides.
+        if (_slip > 0.001f)
+        {
+            float sl = w * _slip;
+            float scrabble = MathF.Sin(_time * 24f);
+            _rig.Rotate("LeftUpperArm", left, -(2.85f + 0.12f * MathF.Sin(_time * 19f)) * sl);
+            _rig.Rotate("RightUpperArm", left, -(2.85f - 0.12f * MathF.Sin(_time * 19f)) * sl);
+            _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, 0.25f * sl);
+            _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, 0.25f * sl);
+            _rig.Rotate("LeftUpperLeg", left, (-0.55f - 0.5f * scrabble) * sl);
+            _rig.Rotate("RightUpperLeg", left, (-0.55f + 0.5f * scrabble) * sl);
+            _rig.Rotate("LeftLowerLeg", left, (1.0f + 0.5f * scrabble) * sl);
+            _rig.Rotate("RightLowerLeg", left, (1.0f - 0.5f * scrabble) * sl);
+            _rig.Rotate("Spine", left, -0.15f * sl);
+            Head(0.2f * sl, 0f, 0f);
+        }
+
+        // Caught again: hanging from both hands, legs dangling and swinging a little,
+        // then finding a foothold.
+        if (_hang > 0.001f)
+        {
+            float hg = w * _hang;
+            float swing = MathF.Sin(_time * 3.2f);
+            _rig.Rotate("LeftUpperArm", left, -2.7f * hg);
+            _rig.Rotate("RightUpperArm", left, -2.7f * hg);
+            _rig.Rotate("LeftLowerArm", _rig.LeftElbowHinge, 0.45f * hg);
+            _rig.Rotate("RightLowerArm", _rig.RightElbowHinge, 0.45f * hg);
+            _rig.Rotate("LeftUpperLeg", left, (-0.25f - 0.2f * swing) * hg);
+            _rig.Rotate("RightUpperLeg", left, (-0.15f + 0.2f * swing) * hg);
+            _rig.Rotate("LeftLowerLeg", left, 0.45f * hg);
+            _rig.Rotate("RightLowerLeg", left, 0.3f * hg);
+            _rig.Rotate("Spine", left, -0.05f * hg);
+            Head(-0.35f * hg, 0f, 0f);
+        }
         // Hold-still breathing while clinging.
         _rig.OffsetHips(_rig.Up * (0.01f * _legScale * MathF.Sin(_time * 1.6f) * w));
     }
@@ -491,7 +538,11 @@ public sealed partial class ProceduralAnimator : IPerformer
         if (_gesture?.Cue.Gesture == Gesture.Yawn)
             _expressions.Set("oh", 0.9f * MathF.Sin(MathF.PI * _gesture.Phase));
         UpdateMouth(dt);
-        float startled = 0.7f * MathF.Max(_drag, _fall * (1f - _brace));
+        if (_climbUp > 0.01f)
+            _expressions.Set("angry", 0.3f * _climbUp * (1f - mood));
+        if (_hang > 0.01f)
+            _expressions.Set("sad", 0.6f * _hang);
+        float startled = 0.7f * MathF.Max(MathF.Max(_drag, _fall * (1f - _brace)), 1.3f * _slip);
         // Eyes squeezed shut and a pained face for a moment after a hard landing.
         if (_tumble > 0.01f)
         {

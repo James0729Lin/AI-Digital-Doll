@@ -18,6 +18,10 @@ namespace DigitalDoll.Mascot;
 /// Desktop mode: a transparent, always-on-top window covering the usable area of a
 /// screen, with the character standing on the taskbar. Only the area around the
 /// character receives the mouse; everything else passes through to the desktop.
+/// The whole window is switched between taking the mouse and letting it through as
+/// the cursor moves over the character or away, rather than shaping the window to
+/// the character: a shaped window only refreshes inside its shape, so moving the
+/// shape every frame flashed stale pixels around the character for a moment.
 /// </summary>
 public partial class MascotRoot : Node3D
 {
@@ -25,8 +29,6 @@ public partial class MascotRoot : Node3D
     private const string SavedCharacter = "user://characters/current.vrm";
     private const float CharacterHeightPoints = 300f;
     private const float HitMargin = 5f;
-    private const float HitSlack = 6f;
-    private const float LeadSeconds = 0.1f;
 
     /// <summary>Cursor travel (px) or hold time (s) that turns a press into picking the character up.</summary>
     private const float DragThreshold = 6f;
@@ -69,7 +71,7 @@ public partial class MascotRoot : Node3D
     private float _yaw;
     private float _screenCheck;
     private float _windowsCheck;
-    private Vector2[] _region = Array.Empty<Vector2>();
+    private bool _clickThrough;
 
     private bool _dragging;
     private bool _pressed;
@@ -197,7 +199,7 @@ public partial class MascotRoot : Node3D
         if (_brain.State == MascotState.Idle && _snapshot == null && !FaceUser)
             AimHeadAtCursor();
         _animator.Update(dt, _brain.State, _brain.VelocityX / _pixelsPerMetre, _dragVelocity.X / _pixelsPerMetre,
-            _brain.State == MascotState.Climb ? _brain.VelocityY / _pixelsPerMetre : 0f, _brain.Running, _brain.ControlledFall);
+            _brain.State == MascotState.Climb ? _brain.VelocityY / _pixelsPerMetre : 0f, _brain.Running, _brain.ControlledFall, _brain.Grip);
 
         if (_snapshot == null)
         {
@@ -300,7 +302,7 @@ public partial class MascotRoot : Node3D
         _dragVelocity = Vector2.Zero;
         _brain.BeginDrag();
         _animator?.StopGestures();
-        SetMousePassthrough(Array.Empty<Vector2>());
+        SetClickThrough(false);
     }
 
     private TouchZone ZoneAt(Vector2 cursor)
@@ -453,7 +455,7 @@ public partial class MascotRoot : Node3D
         if (_snapshot != null)
         {
             if (_snapshot.Animal is Species animal)
-                return LoadAnimal(animal);
+                return LoadAnimal(animal, _snapshot.AnimalStyle);
             return _snapshot.Body != null
                 ? AttachCharacter(BodyCharacter.Create(_snapshot.Body), "body (snapshot)")
                 : LoadCharacter(_snapshot.CharacterPath ?? DefaultCharacter, persist: false);
@@ -464,7 +466,7 @@ public partial class MascotRoot : Node3D
         {
             // A saved edited body falls back to the default character while the editor is hidden.
             CharacterSource.Body when BodyEditorEnabled => LoadBody(),
-            CharacterSource.Animal => LoadAnimal(settings.Animal),
+            CharacterSource.Animal => LoadAnimal(settings.Animal, settings.AnimalStyle),
             CharacterSource.Vrm => FileAccess.FileExists(SavedCharacter) && LoadCharacter(SavedCharacter, persist: false),
             _ => LoadCharacter(DefaultCharacter, persist: false),
         };
@@ -527,13 +529,21 @@ public partial class MascotRoot : Node3D
     }
 
     /// <summary>Shows an animal instead of the doll.</summary>
-    private bool LoadAnimal(Species species)
+    /// <summary>
+    /// Shows an animal in one of its versions (1.0 built from shapes, 2.0 and 3.0 from
+    /// bundled models); a version the species does not come in falls back to 1.0.
+    /// </summary>
+    private bool LoadAnimal(Species species, AnimalStyle style)
     {
-        var animal = Animals.AnimalBody.Create(species, _random);
+        IMascotBody animal = (style == AnimalStyle.Classic ? null : Animals.ModelAnimalBody.Create(species, style, _random))
+            ?? (IMascotBody)Animals.AnimalBody.Create(species, _random);
         _pivot.AddChild(animal.Model);
         Attach(animal);
         return true;
     }
+
+    /// <summary>Menu ids for the animals: species and version packed together.</summary>
+    private static int AnimalMenuId(Species species, AnimalStyle style) => (int)species * 10 + (int)style;
 
     private void Attach(IMascotBody body)
     {
@@ -541,12 +551,12 @@ public partial class MascotRoot : Node3D
         _model = body.Model;
         _body = body;
         _animator = body.Performer;
-        _region = Array.Empty<Vector2>();
 
         float previous = _heightPixels;
         // Snapshots frame any character at the same size.
         _heightPixels = _snapshot != null ? _baseHeightPixels : _baseHeightPixels * body.SizeFactor;
-        _modelHeight = MeasureHeight(body.Model, _pivot);
+        // Model animals know their height (their skinned meshes' own boxes ignore the skeleton).
+        _modelHeight = body is Animals.ModelAnimalBody model ? model.Size.Y : MeasureHeight(body.Model, _pivot);
         UpdateCamera();
 
         // A different size walks, jumps and climbs differently: start a new brain where
@@ -625,29 +635,23 @@ public partial class MascotRoot : Node3D
 
     private void UpdateHitRegion()
     {
-        if (_dragging || _body == null)
+        if (_body == null)
             return;
-
-        var tight = _body.Outline(_camera, HitMargin);
-        _tight = tight;
-        if (_region.Length >= 3 && Array.TrueForAll(tight, p => Geometry2D.IsPointInPolygon(p, _region)))
-            return;
-
-        // Slack so a breathing or walking character does not need a new window region
-        // (an expensive call on Windows) every frame. Windows applies a new region a
-        // frame or two after the frame it was computed for, and pixels outside the
-        // region are not drawn, so a fast fall or jump needs room for ~0.1 s of travel
-        // or its leading edge is cut off.
-        var brain = _brain!;
-        float speed = new Vector2(brain.VelocityX, brain.VelocityY).Length();
-        float slack = HitSlack + speed * LeadSeconds;
-        SetMousePassthrough(_body.Outline(_camera, HitMargin + slack));
+        if (!_dragging)
+            _tight = _body.Outline(_camera, HitMargin);
+        // Take the mouse while it is over the character (or holding it); let it through
+        // to the desktop everywhere else.
+        var cursor = CursorInWindow();
+        bool over = _dragging || _pressed || (_tight.Length >= 3 && Geometry2D.IsPointInPolygon(cursor, _tight));
+        SetClickThrough(!over);
     }
 
-    private void SetMousePassthrough(Vector2[] region)
+    private void SetClickThrough(bool through)
     {
-        _region = region;
-        DisplayServer.WindowSetMousePassthrough(region);
+        if (through == _clickThrough)
+            return;
+        _clickThrough = through;
+        GetWindow().MousePassthrough = through;
     }
 
     private Vector3 ScreenToWorld(Vector2 p) =>
@@ -671,12 +675,21 @@ public partial class MascotRoot : Node3D
         if (BodyEditorEnabled)
             _menu.AddItem(Tr("MENU_USE_BODY"), MenuUseBody);
         var animals = new PopupMenu { Name = "Animals" };
+        // Each animal in every version it comes in: "Cat 1.0", "Cat 2.0", "Cat 3.0"…
         foreach (var species in Enum.GetValues<Species>())
-            animals.AddItem(Tr("ANIMAL_" + species.ToString().ToUpperInvariant()), (int)species);
+        {
+            foreach (var style in Enum.GetValues<AnimalStyle>())
+            {
+                if (style == AnimalStyle.Classic || Animals.ModelAnimalBody.Has(species, style))
+                    animals.AddItem($"{Tr("ANIMAL_" + species.ToString().ToUpperInvariant())} {(int)style + 1}.0", AnimalMenuId(species, style));
+            }
+        }
         animals.IdPressed += id =>
         {
-            if (LoadAnimal((Species)(int)id))
-                SettingsStore.UseAnimal((Species)(int)id);
+            var species = (Species)((int)id / 10);
+            var style = (AnimalStyle)((int)id % 10);
+            if (LoadAnimal(species, style))
+                SettingsStore.UseAnimal(species, style);
         };
         _menu.AddSubmenuNodeItem(Tr("MENU_ANIMALS"), animals);
         _menu.AddItem(Tr("MENU_LOAD_CHARACTER"), MenuLoad);
