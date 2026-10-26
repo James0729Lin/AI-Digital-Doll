@@ -58,8 +58,10 @@ public sealed class AnimalBody : IMascotBody
 
     public float Yaw(MascotState state, int facing, int wallSide, bool faceUser) => state switch
     {
-        // Animals walk side-on to the viewer and turn three-quarters to look out.
-        MascotState.Walk or MascotState.Sprawl => facing * Mathf.Pi / 2f,
+        // Animals walk mostly side-on but turned a little toward the viewer, so the face
+        // still shows (a round head seen in pure profile is just a ball).
+        MascotState.Walk => facing * 1.15f,
+        MascotState.Sprawl => facing * Mathf.Pi / 2f,
         MascotState.Falling or MascotState.Jump => facing * Mathf.Pi / 2f * 0.8f,
         MascotState.Climb or MascotState.Cling => wallSide * Mathf.Pi / 2f,
         MascotState.Lie or MascotState.Landing or MascotState.GetUp => facing * 1.0f,

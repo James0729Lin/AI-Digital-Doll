@@ -89,25 +89,28 @@ public static class AnimalBuilder
         var pink = new Color(0.98f, 0.62f, 0.68f);
         var (model, root, body) = Frame("Cat", 0.135f);
         Blob(body, Vector3.Zero, new(0.075f, 0.072f, 0.13f), orange);
-        Blob(body, new(0f, -0.012f, 0.085f), new(0.055f, 0.055f, 0.055f), White);
+        Blob(body, new(0f, -0.012f, 0.085f), new(0.055f, 0.055f, 0.055f), White, outline: false);
 
         var legs = Legs4(body, 0.045f, 0.08f, -0.035f, 0.1f, 0.021f, orange, White);
         var head = Node(body, "Head", new(0f, 0.045f, 0.11f));
-        Blob(head, new(0f, 0.07f, 0.03f), new(0.1f, 0.088f, 0.088f), orange);
-        Blob(head, new(0f, 0.04f, 0.095f), new(0.048f, 0.032f, 0.032f), White);
-        Blob(head, new(0f, 0.058f, 0.125f), new(0.011f, 0.008f, 0.006f), pink, solid: false);
+        Blob(head, new(0f, 0.07f, 0.03f), new(0.106f, 0.088f, 0.08f), orange);
+        // Fluffy cheeks widen the face like a real cat's.
+        for (int s = -1; s <= 1; s += 2)
+            Blob(head, new(0.072f * s, 0.035f, 0.045f), new(0.042f, 0.032f, 0.04f), orange, outline: false);
+        Blob(head, new(0f, 0.038f, 0.088f), new(0.05f, 0.034f, 0.034f), White, outline: false);
+        Blob(head, new(0f, 0.056f, 0.12f), new(0.011f, 0.008f, 0.006f), pink, solid: false);
         for (int i = -1; i <= 1; i++)
             Blob(head, new(0.025f * i, 0.142f, 0.06f - 0.012f * MathF.Abs(i)), new(0.007f, 0.012f, 0.012f), stripe, solid: false);
         var ears = new Node3D[2];
         for (int s = 0; s < 2; s++)
         {
             float x = s == 0 ? 1f : -1f;
-            ears[s] = Node(head, s == 0 ? "EarL" : "EarR", new(0.055f * x, 0.135f, 0.025f), new(0.1f, 0f, -0.42f * x));
-            Cone(ears[s], new(0f, 0.03f, 0f), 0.036f, 0.065f, orange);
-            Cone(ears[s], new(0f, 0.026f, 0.012f), 0.02f, 0.042f, pink, solid: false);
+            ears[s] = Node(head, s == 0 ? "EarL" : "EarR", new(0.056f * x, 0.13f, 0.03f), new(0.05f, 0f, -0.38f * x));
+            Ear(ears[s], 0.036f, 0.062f, 0.02f, orange);
+            Ear(ears[s], 0.022f, 0.042f, 0.008f, pink, front: 0.011f, solid: false);
         }
-        var (eyes, cheeks, mouth) = Face(head, new(0f, 0.07f, 0.03f), new(0.1f, 0.088f, 0.088f), eyeX: 0.04f, eyeY: 0.082f, eyeSize: 1f, mouthAt: new(0f, 0.026f, 0.122f));
-        var tail = Chain(body, new(0f, 0.03f, -0.12f), 5, 0.042f, 0.016f, orange, White);
+        var (eyes, cheeks, mouth) = Face(head, new(0f, 0.07f, 0.03f), new(0.106f, 0.088f, 0.08f), eyeX: 0.047f, eyeY: 0.08f, eyeSize: 1.15f, mouthAt: new(0f, 0.026f, 0.118f));
+        var tail = Chain(body, new(0f, 0.035f, -0.115f), 5, 0.036f, 0.017f, orange, stripe, curl: 0.32f);
         return Finish(new AnimalRig
         {
             Species = Species.Cat, Model = model, Root = root, Body = body, Head = head, Legs = legs, Tail = tail,
@@ -122,23 +125,23 @@ public static class AnimalBuilder
         var brown = new Color(0.55f, 0.35f, 0.22f);
         var (model, root, body) = Frame("Dog", 0.14f);
         Blob(body, Vector3.Zero, new(0.08f, 0.075f, 0.135f), tan);
-        Blob(body, new(0f, -0.015f, 0.085f), new(0.058f, 0.058f, 0.058f), White);
+        Blob(body, new(0f, -0.015f, 0.085f), new(0.058f, 0.058f, 0.058f), White, outline: false);
         var legs = Legs4(body, 0.048f, 0.082f, -0.035f, 0.105f, 0.024f, tan, White);
         var head = Node(body, "Head", new(0f, 0.045f, 0.11f));
-        Blob(head, new(0f, 0.07f, 0.03f), new(0.098f, 0.088f, 0.088f), tan);
-        Blob(head, new(0f, 0.038f, 0.1f), new(0.052f, 0.038f, 0.05f), White);
-        Blob(head, new(0f, 0.062f, 0.147f), new(0.018f, 0.013f, 0.011f), Ink, solid: false);
+        Blob(head, new(0f, 0.07f, 0.03f), new(0.104f, 0.088f, 0.08f), tan);
+        Blob(head, new(0f, 0.04f, 0.1f), new(0.05f, 0.04f, 0.055f), White);
+        Blob(head, new(0f, 0.066f, 0.152f), new(0.018f, 0.013f, 0.011f), Ink, solid: false);
         var ears = new Node3D[2];
         for (int s = 0; s < 2; s++)
         {
             float x = s == 0 ? 1f : -1f;
-            ears[s] = Node(head, s == 0 ? "EarL" : "EarR", new(0.075f * x, 0.125f, 0.02f), new(0f, 0f, 0.3f * x));
-            Blob(ears[s], new(0.012f * x, -0.042f, 0f), new(0.026f, 0.056f, 0.04f), brown);
+            ears[s] = Node(head, s == 0 ? "EarL" : "EarR", new(0.07f * x, 0.145f, 0.005f), new(0.3f, 0f, 0.3f * x));
+            Blob(ears[s], new(0.01f * x, -0.05f, 0f), new(0.015f, 0.058f, 0.028f), brown);
         }
-        var (eyes, cheeks, mouth) = Face(head, new(0f, 0.07f, 0.03f), new(0.098f, 0.088f, 0.088f), eyeX: 0.042f, eyeY: 0.088f, eyeSize: 1f, mouthAt: new(0f, 0.012f, 0.14f));
+        var (eyes, cheeks, mouth) = Face(head, new(0f, 0.07f, 0.03f), new(0.104f, 0.088f, 0.08f), eyeX: 0.048f, eyeY: 0.088f, eyeSize: 1.15f, mouthAt: new(0f, 0.012f, 0.145f));
         var tongue = Node(mouth, "Tongue", new(0f, -0.008f, 0.006f));
         Blob(tongue, Vector3.Zero, new(0.011f, 0.008f, 0.012f), TonguePink, solid: false, outline: false);
-        var tail = Chain(body, new(0f, 0.04f, -0.125f), 3, 0.035f, 0.02f, tan, tan);
+        var tail = Chain(body, new(0f, 0.045f, -0.12f), 3, 0.034f, 0.018f, tan, White, curl: 0.55f);
         return Finish(new AnimalRig
         {
             Species = Species.Dog, Model = model, Root = root, Body = body, Head = head, Legs = legs, Tail = tail,
@@ -168,8 +171,8 @@ public static class AnimalBuilder
             ears[s] = Node(head, s == 0 ? "EarL" : "EarR", new(0.06f * x, 0.13f, 0.035f), new(0.55f, 0f, -0.35f * x));
             Cone(ears[s], new(0f, 0.022f, 0f), 0.03f, 0.048f, dark, segments: 4);
         }
-        var (eyes, cheeks, mouth) = Face(head, new(0f, 0.065f, 0.035f), new(0.1f, 0.09f, 0.088f), eyeX: 0.045f, eyeY: 0.088f, eyeSize: 0.85f, mouthAt: new(0f, 0.012f, 0.112f));
-        var tail = Chain(body, new(0f, 0.035f, -0.125f), 5, 0.014f, 0.007f, dark, dark);
+        var (eyes, cheeks, mouth) = Face(head, new(0f, 0.065f, 0.035f), new(0.1f, 0.09f, 0.088f), eyeX: 0.046f, eyeY: 0.088f, eyeSize: 1f, mouthAt: new(0f, 0.012f, 0.112f));
+        var tail = Chain(body, new(0f, 0.04f, -0.125f), 5, 0.014f, 0.007f, dark, dark, curl: 0.9f);
         return Finish(new AnimalRig
         {
             Species = Species.Pig, Model = model, Root = root, Body = body, Head = head, Legs = legs, Tail = tail,
@@ -202,8 +205,8 @@ public static class AnimalBuilder
         for (int s = 0; s < 2; s++)
         {
             float x = s == 0 ? 1f : -1f;
-            wings[s] = Node(body, s == 0 ? "WingL" : "WingR", new(0.078f * x, 0.025f, 0f));
-            Blob(wings[s], new(0.008f * x, -0.025f, -0.012f), new(0.02f, 0.05f, 0.07f), new Color(0.95f, 0.93f, 0.88f));
+            wings[s] = Node(body, s == 0 ? "WingL" : "WingR", new(0.072f * x, 0.025f, 0f));
+            Blob(wings[s], new(0.004f * x, -0.022f, -0.016f), new(0.016f, 0.045f, 0.065f), new Color(0.95f, 0.93f, 0.88f));
         }
         var tail = new Node3D[1];
         tail[0] = Node(body, "Tail", new(0f, 0.04f, -0.085f), new(-0.6f, 0f, 0f));
@@ -245,8 +248,11 @@ public static class AnimalBuilder
         {
             float sx = i % 2 == 0 ? 1f : -1f, sz = i < 2 ? 1f : -1f;
             legs[i] = Node(body, names[i], new(x * sx, y, z * sz));
+            // Back legs get a bigger thigh, like a sitting cat's haunch.
+            float haunch = sz > 0 ? 1.45f : 1.8f;
+            Blob(legs[i], new(0f, radius * 0.4f, 0f), new Vector3(radius, radius * 1.4f, radius * 1.15f) * haunch, colour, outline: false);
             Capsule(legs[i], Vector3.Zero, new(0f, -length + radius * 0.8f, 0f), radius, colour);
-            Blob(legs[i], new(0f, -length + radius * 0.7f, radius * 0.35f), new(radius * 1.12f, radius * 0.75f, radius * 1.35f), paw);
+            Blob(legs[i], new(0f, -length + radius * 0.7f, radius * 0.35f), new(radius * 1.2f, radius * 0.8f, radius * 1.4f), paw);
         }
         return legs;
     }
@@ -295,15 +301,16 @@ public static class AnimalBuilder
     }
 
     /// <summary>A tail: a chain of segments pointing backward, each one a child of the last.</summary>
-    private static Node3D[] Chain(Node3D body, Vector3 start, int count, float length, float radius, Color colour, Color tip)
+    private static Node3D[] Chain(Node3D body, Vector3 start, int count, float length, float radius, Color colour, Color tip, float curl = 0f)
     {
         var chain = new Node3D[count];
         Node3D parent = body;
         var at = start;
         for (int i = 0; i < count; i++)
         {
-            chain[i] = Node(parent, $"Tail{i}", at);
-            float r = radius * (1f - 0.12f * i);
+            // Each segment bends a little further up than the last.
+            chain[i] = Node(parent, $"Tail{i}", at, new(curl * (i == 0 ? 0.6f : 1f), 0f, 0f));
+            float r = radius * (1f - 0.1f * i);
             Capsule(chain[i], Vector3.Zero, new(0f, 0f, -length), r, i == count - 1 ? tip : colour);
             parent = chain[i];
             at = new Vector3(0f, 0f, -length);
@@ -363,6 +370,15 @@ public static class AnimalBuilder
     {
         var mesh = new CylinderMesh { TopRadius = 0.001f, BottomRadius = radius, Height = height, RadialSegments = segments, Rings = 1 };
         return Add(parent, mesh, new Transform3D(Basis.Identity, position), colour, solid, outline: true);
+    }
+
+    /// <summary>A flat triangular ear standing up from its node: a three-sided cone squashed front to back.</summary>
+    private static MeshInstance3D Ear(Node3D parent, float width, float height, float depth, Color colour, float front = 0f, bool solid = true)
+    {
+        var mesh = new CylinderMesh { TopRadius = 0.001f, BottomRadius = 1f, Height = 1f, RadialSegments = 3, Rings = 1 };
+        // One flat face of the triangle toward the front (+Z).
+        var basis = Basis.Identity.Scaled(new Vector3(width, height, depth)) * new Basis(Vector3.Up, Mathf.Pi);
+        return Add(parent, mesh, new Transform3D(basis, new Vector3(0f, height * 0.45f, front)), colour, solid, outline: true);
     }
 
     private static MeshInstance3D Cylinder(Node3D parent, Vector3 position, float radius, float height, Color colour)

@@ -43,6 +43,13 @@ public partial class MascotRoot : Node3D
     private const int MenuChat = 7;
     private const int MenuAiSettings = 8;
 
+    /// <summary>
+    /// The body editor and the edited body are hidden for now (the code is kept, and
+    /// <c>--creator</c> still opens the editor for development); the Windows export
+    /// leaves out their assets. Set to true to bring both back to the menu.
+    /// </summary>
+    private static readonly bool BodyEditorEnabled = false;
+
     private Camera3D _camera = null!;
     private Node3D _pivot = null!;
     private PopupMenu _menu = null!;
@@ -455,7 +462,8 @@ public partial class MascotRoot : Node3D
         var settings = SettingsStore.Load();
         return settings.Character switch
         {
-            CharacterSource.Body => LoadBody(),
+            // A saved edited body falls back to the default character while the editor is hidden.
+            CharacterSource.Body when BodyEditorEnabled => LoadBody(),
             CharacterSource.Animal => LoadAnimal(settings.Animal),
             CharacterSource.Vrm => FileAccess.FileExists(SavedCharacter) && LoadCharacter(SavedCharacter, persist: false),
             _ => LoadCharacter(DefaultCharacter, persist: false),
@@ -653,11 +661,15 @@ public partial class MascotRoot : Node3D
         _menu.AddItem(Tr("MENU_CHAT"), MenuChat);
         _menu.AddItem(Tr("MENU_AI_SETTINGS"), MenuAiSettings);
         _menu.AddSeparator();
-        _menu.AddItem(Tr("MENU_BODY_EDITOR"), MenuCreator);
-        _menu.AddSeparator();
+        if (BodyEditorEnabled)
+        {
+            _menu.AddItem(Tr("MENU_BODY_EDITOR"), MenuCreator);
+            _menu.AddSeparator();
+        }
         _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
         _menu.AddCheckItem(Tr("MENU_STAY"), MenuStay);
-        _menu.AddItem(Tr("MENU_USE_BODY"), MenuUseBody);
+        if (BodyEditorEnabled)
+            _menu.AddItem(Tr("MENU_USE_BODY"), MenuUseBody);
         var animals = new PopupMenu { Name = "Animals" };
         foreach (var species in Enum.GetValues<Species>())
             animals.AddItem(Tr("ANIMAL_" + species.ToString().ToUpperInvariant()), (int)species);
@@ -672,8 +684,11 @@ public partial class MascotRoot : Node3D
         _menu.AddSeparator();
         _menu.AddItem(Tr("MENU_QUIT"), MenuQuit);
         _menu.IdPressed += OnMenu;
-        _menu.AboutToPopup += () =>
-            _menu.SetItemDisabled(_menu.GetItemIndex(MenuUseBody), !FileAccess.FileExists(CreatorRoot.SavePath));
+        if (BodyEditorEnabled)
+        {
+            _menu.AboutToPopup += () =>
+                _menu.SetItemDisabled(_menu.GetItemIndex(MenuUseBody), !FileAccess.FileExists(CreatorRoot.SavePath));
+        }
 
         _fileDialog.Title = Tr("DIALOG_OPEN_CHARACTER");
         _fileDialog.Filters = new[] { "*.vrm ; VRM" };
