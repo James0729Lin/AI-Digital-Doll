@@ -45,7 +45,7 @@ public static class PoseCatalog
         P("poke_cheek", PoseBase.Stand, "食指戳臉頰", "戳臉", "戳臉頰", "poke cheek"),
         P("cover_mouth", PoseBase.Stand, "雙手遮嘴", "遮嘴", "害羞遮嘴", "cover mouth"),
         P("pray", PoseBase.Stand, "雙手合十拜託", "拜託", "合十", "please"),
-        P("hug_self", PoseBase.Stand, "抱住自己害羞", "抱自己", "抱抱自己", "hug yourself"),
+        P("hug_self", PoseBase.Stand, "雙手握在胸前害羞扭動", "害羞", "抱自己", "hug yourself"),
         P("finger_frame", PoseBase.Stand, "手指框", "手指框", "拍照框", "finger frame"),
         P("tuck_hair", PoseBase.Stand, "把頭髮撥到耳後", "頭髮撥到耳後", "撥到耳後", "tuck hair"),
         P("cheeks_hands", PoseBase.Stand, "雙手捧臉", "捧臉", "捧著臉", "hands on cheeks"),
@@ -92,6 +92,40 @@ public static class PoseCatalog
         P("squat_hair", PoseBase.Squat, "蹲下撥頭髮", "蹲著撥頭髮", "squat hair"),
         P("squat_tiptoe", PoseBase.Squat, "踮腳蹲雙手撐地", "踮腳蹲", "tiptoe squat"),
         P("squat_look_back", PoseBase.Squat, "蹲著回頭", "蹲著回頭", "squat look back"),
+
+        // Lying down.
+        P("lie_back_arms_up", PoseBase.Lie, "仰躺雙手舉過頭", "仰躺", "躺平", "lie on your back"),
+        P("lie_back_knee", PoseBase.Lie, "仰躺單膝立起", "仰躺立膝", "lie back one knee up"),
+        P("lie_back_legs_up", PoseBase.Lie, "仰躺雙腳朝天", "腳朝天", "legs up"),
+        P("lie_side_chin", PoseBase.Lie, "側躺托腮", "側躺托腮", "側躺", "lie on your side"),
+        P("lie_side_arm_up", PoseBase.Lie, "側躺單手舉過頭", "側躺伸手", "lie on your side arm up"),
+        P("lie_side_curl", PoseBase.Lie, "側躺彎膝放鬆", "側躺彎膝", "curl up on your side"),
+        P("lie_front_kick", PoseBase.Lie, "趴著托腮翹腳", "趴著翹腳", "趴著", "lie on your stomach"),
+        P("lie_front_pillow", PoseBase.Lie, "趴著手當枕頭", "趴著睡", "手當枕頭", "head on your arms"),
+
+        // Bending, twisting, arching.
+        P("lean_knees", PoseBase.Stand, "彎腰雙手放膝上", "彎腰", "手放膝蓋", "hands on knees"),
+        P("touch_shins", PoseBase.Stand, "彎腰摸小腿", "摸小腿", "touch your shins"),
+        P("lean_look_up", PoseBase.Stand, "彎腰叉腰抬頭看", "彎腰抬頭", "lean and look up"),
+        P("lean_dangle", PoseBase.Stand, "彎腰雙手垂下", "手垂下", "雙手下垂", "let your arms hang"),
+        P("lean_leg_back", PoseBase.Stand, "彎腰單腳往後抬", "彎腰抬腳", "lean with a leg back"),
+        P("twist_open", PoseBase.Stand, "扭腰張開雙臂", "扭腰", "轉身張開手", "twist"),
+        P("kneel_twist_back", PoseBase.Kneel, "跪著轉身回頭", "跪著回頭", "kneel and look back"),
+        P("sit_twist", PoseBase.Sit, "坐著扭轉上身", "坐著扭腰", "seated twist"),
+        P("stand_arch", PoseBase.Stand, "站著往後仰", "往後仰", "後仰", "lean back"),
+        P("arms_up_arch", PoseBase.Stand, "雙手舉高往後仰", "舉手後仰", "reach back"),
+
+        // Stretching, flexibility, gymnastics, yoga.
+        P("stretch_twist", PoseBase.Stand, "往上伸展並扭腰", "伸展扭腰", "stretch and twist"),
+        P("toe_touch", PoseBase.Stand, "站立前彎雙手碰地", "前彎", "摸腳尖", "碰地", "touch your toes"),
+        P("i_balance", PoseBase.Stand, "站立 I 字平衡", "i字平衡", "i字", "抬腿平衡", "i balance"),
+        P("v_leg", PoseBase.Stand, "側抬腿成 V 字", "側抬腿", "v字抬腿", "leg raise"),
+        P("front_split", PoseBase.Sit, "前後劈腿", "劈腿", "前後劈腿", "split"),
+        P("side_split", PoseBase.Sit, "左右劈腿", "一字馬", "左右劈腿", "side split"),
+        P("standing_split", PoseBase.Stand, "前彎單腳往後高舉", "站立劈腿", "standing split"),
+        P("bridge", PoseBase.Lie, "橋式", "橋式", "下腰", "bridge"),
+        P("cat_stretch", PoseBase.Kneel, "瑜珈貓式伸展", "貓式", "貓伸懶腰", "cat stretch"),
+        P("table_pose", PoseBase.Sit, "瑜珈桌式", "桌式", "反向桌式", "table pose"),
     };
 
     /// <summary>

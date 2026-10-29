@@ -126,8 +126,8 @@ public sealed partial class ProceduralAnimator
         ["hug_self"] = new((a, w, t) =>
         {
             float rock = MathF.Sin(t * 2.2f);
-            a.Arm(R, 0.25f, 0.6f, 2.2f, 1.05f, 0f, w);
-            a.Arm(L, 0.25f, 0.55f, 2.15f, 1.0f, 0f, w);
+            a.Arm(R, 0.1f, 0.7f, 1.85f, 0.75f, 0f, w);
+            a.Arm(L, 0.1f, 0.7f, 1.85f, 0.75f, 0f, w);
             a.Shrug(0.12f, w);
             a._rig.Rotate("Spine", a._rig.Up, 0.12f * rock * w);
             a.Head(0.15f * w, 0.1f * rock * w, 0f);
@@ -415,6 +415,264 @@ public sealed partial class ProceduralAnimator
             a.Arm(R, 0.1f, 0.6f, 0.6f, 0.15f, 0f, w);
             a.Arm(L, 0.1f, 0.6f, 0.6f, 0.15f, 0f, w);
         }, Yaw: 2.3f, FaceWeight: 0.6f),
+
+        // ---- Lying down ------------------------------------------------------------
+        ["lie_back_arms_up"] = new((a, w, t) =>
+        {
+            a.SupineBase(w);
+            a.Arm(R, 0.3f, 2.9f, 0.3f, 0f, 0f, w);
+            a.Arm(L, 0.3f, 2.9f, 0.3f, 0f, 0f, w);
+            a.Head(-0.1f * w, 0f, 0f);
+        }, Yaw: 1.45f, Face: "relaxed", FaceWeight: 0.6f),
+        ["lie_back_knee"] = new((a, w, t) =>
+        {
+            a.SupineBase(w);
+            var left = a._rig.Left;
+            a._rig.Rotate("LeftUpperLeg", left, -1.0f * w);
+            a._rig.Rotate("LeftLowerLeg", left, 1.9f * w);
+            a.Arm(R, 0.25f, 0.15f, 0.2f, 0f, 0f, w);
+            a.Arm(L, 1.9f, 0.3f, 2.2f, 0.1f, 0f, w);
+        }, Yaw: 1.45f, Face: "relaxed", FaceWeight: 0.6f),
+        ["lie_back_legs_up"] = new((a, w, t) =>
+        {
+            a.SupineBase(w);
+            var left = a._rig.Left;
+            float kick = 0.08f * MathF.Sin(t * 2.5f);
+            a._rig.Rotate("LeftUpperLeg", left, (-1.5f + kick) * w);
+            a._rig.Rotate("RightUpperLeg", left, (-1.5f - kick) * w);
+            a._rig.Rotate("LeftFoot", left, 0.5f * w);
+            a._rig.Rotate("RightFoot", left, 0.5f * w);
+            a.Arm(R, 0.35f, 0f, 0.1f, 0f, 0f, w);
+            a.Arm(L, 0.35f, 0f, 0.1f, 0f, 0f, w);
+        }, Yaw: 1.45f, FaceWeight: 0.8f),
+        ["lie_side_chin"] = new((a, w, t) =>
+        {
+            a.SideLieBase(L, w);
+            a.Arm(R, 0f, 1.25f, 2.4f, 0.3f, 0f, w);
+            a.Arm(L, 0f, 0.6f, 0.4f, 0.4f, 0f, w);
+            a.Head(-0.1f * w, 0f, 0.35f * w);
+        }, Yaw: 0f, FaceWeight: 0.6f),
+        ["lie_side_arm_up"] = new((a, w, t) =>
+        {
+            a.SideLieBase(L, w);
+            a.Arm(R, 2.7f, 0.2f, 0.2f, 0f, 0f, w);
+            a.Arm(L, 0f, 0.6f, 0.4f, 0.4f, 0f, w);
+        }, Yaw: 0f, Face: "relaxed", FaceWeight: 0.6f),
+        ["lie_side_curl"] = new((a, w, t) =>
+        {
+            a.SideLieBase(L, w);
+            var left = a._rig.Left;
+            a._rig.Rotate("LeftUpperLeg", left, -0.9f * w);
+            a._rig.Rotate("RightUpperLeg", left, -0.7f * w);
+            a._rig.Rotate("LeftLowerLeg", left, 1.4f * w);
+            a._rig.Rotate("RightLowerLeg", left, 1.2f * w);
+            a.Arm(R, 0f, 0.8f, 1.2f, 0.4f, 0f, w);
+            a.Arm(L, 0f, 0.9f, 1.6f, 0.4f, 0f, w);
+            a.Head(0.15f * w, 0f, 0.2f * w);
+        }, Yaw: 0f, Face: "relaxed", FaceWeight: 0.7f),
+        ["lie_front_kick"] = new((a, w, t) =>
+        {
+            a.ProneBase(w);
+            var left = a._rig.Left;
+            float k = MathF.Sin(t * 3f);
+            a._rig.Rotate("Spine", left, -0.35f * w);
+            a._rig.Rotate("Chest", left, -0.2f * w);
+            a._rig.Rotate("LeftLowerLeg", left, (1.7f + 0.35f * k) * w);
+            a._rig.Rotate("RightLowerLeg", left, (1.7f - 0.35f * k) * w);
+            a.Arm(R, 0.1f, 2.1f, 2.3f, 0.5f, 0f, w);
+            a.Arm(L, 0.1f, 2.1f, 2.3f, 0.5f, 0f, w);
+            a.Head(-0.35f * w, 0f, 0.1f * w);
+        }, Yaw: 1.45f, FaceWeight: 0.9f),
+        ["lie_front_pillow"] = new((a, w, t) =>
+        {
+            a.ProneBase(w);
+            a.Arm(R, 0.2f, 2.6f, 2.4f, 0.8f, 0f, w);
+            a.Arm(L, 0.2f, 2.6f, 2.4f, 0.8f, 0f, w);
+            a.Head(-0.15f * w, 0.5f * w, 0f);
+        }, Yaw: 1.45f, Face: "relaxed", FaceWeight: 0.8f),
+
+        // ---- Bending, twisting, arching -----------------------------------------------
+        ["lean_knees"] = new((a, w, t) =>
+        {
+            a.BendForward(0.85f, w);
+            a.Crouch(0.3f, w);
+            a.Arm(R, 0.1f, 1.25f, 0.1f, 0.25f, 0f, w);
+            a.Arm(L, 0.1f, 1.25f, 0.1f, 0.25f, 0f, w);
+            a.Head(-0.35f * w, 0f, 0.1f * w);
+        }, Yaw: 0.4f, FaceWeight: 0.8f),
+        ["touch_shins"] = new((a, w, t) =>
+        {
+            a.BendForward(1.05f, w);
+            a.Arm(R, 0.1f, 1.25f, 0.1f, 0.2f, 0f, w);
+            a.Arm(L, 0.1f, 1.25f, 0.1f, 0.2f, 0f, w);
+            a.Head(-0.5f * w, 0f, 0f);
+        }, Yaw: 0.9f, FaceWeight: 0.6f),
+        ["lean_look_up"] = new((a, w, t) =>
+        {
+            a.BendForward(0.8f, w);
+            a.HandOnHip(L, w);
+            a.Arm(R, 0.1f, 1.2f, 0.2f, 0.25f, 0f, w);
+            a.Head(-0.55f * w, 0f, -0.1f * w);
+        }, Yaw: 0.5f, FaceWeight: 0.8f),
+        ["lean_dangle"] = new((a, w, t) =>
+        {
+            float sway = MathF.Sin(t * 1.8f);
+            a.BendForward(1.2f, w);
+            a.Arm(R, 0.05f, 1.35f + 0.1f * sway, 0.05f, 0.1f, 0f, w);
+            a.Arm(L, 0.05f, 1.35f - 0.1f * sway, 0.05f, 0.1f, 0f, w);
+            a.Head(0.2f * w, 0f, 0f);
+        }, Yaw: 1.0f, Face: "relaxed", FaceWeight: 0.6f),
+        ["lean_leg_back"] = new((a, w, t) =>
+        {
+            a.BendForward(0.6f, w);
+            var left = a._rig.Left;
+            a._rig.Rotate("RightUpperLeg", left, 0.9f * w);
+            a._rig.Rotate("RightLowerLeg", left, 0.6f * w);
+            a.Arm(R, 0.6f, 0.4f, 0.2f, 0f, 0f, w);
+            a.Arm(L, 0.1f, 1.0f, 0.15f, 0.2f, 0f, w);
+            a.Head(-0.4f * w, 0f, 0f);
+        }, Yaw: 1.0f, FaceWeight: 0.8f),
+        ["twist_open"] = new((a, w, t) =>
+        {
+            a._rig.Rotate("Spine", a._rig.Up, 0.35f * w);
+            a._rig.Rotate("Chest", a._rig.Up, 0.2f * w);
+            a.Arm(R, 1.45f, 0.2f, 0.15f, -0.2f, 0f, w);
+            a.Arm(L, 1.45f, 0.2f, 0.15f, -0.2f, 0f, w);
+            a.Head(-0.05f * w, 0.2f * w, 0f);
+            a.Contrapposto(R, w);
+        }, Yaw: 0.2f, FaceWeight: 0.8f),
+        ["kneel_twist_back"] = new((a, w, t) =>
+        {
+            a.KneelBase(w);
+            a._rig.Rotate("Spine", a._rig.Up, -0.45f * w);
+            a._rig.Rotate("Chest", a._rig.Up, -0.25f * w);
+            a.Head(0f, -0.6f * w, 0.1f * w);
+            a.Arm(R, 0.05f, 0.35f, 0.9f, 0.45f, 0f, w);
+            a.Arm(L, 0.05f, 0.35f, 0.9f, 0.45f, 0f, w);
+        }, Yaw: 2.2f, FaceWeight: 0.6f),
+        ["sit_twist"] = new((a, w, t) =>
+        {
+            a.SideSitBase(R, w);
+            a._rig.Rotate("Spine", a._rig.Up, 0.4f * w);
+            a._rig.Rotate("Chest", a._rig.Up, 0.25f * w);
+            a.Arm(L, 0.35f, -0.3f, 0.1f, -0.2f, 0f, w);
+            a.Arm(R, 0f, 0.6f, 1.2f, 0.9f, 0f, w);
+            a.Head(0f, 0.3f * w, 0f);
+        }, Yaw: 0.2f, Face: "relaxed", FaceWeight: 0.6f),
+        ["stand_arch"] = new((a, w, t) =>
+        {
+            a.Lean(-0.25f * w, w);
+            a._rig.Rotate("Chest", a._rig.Left, -0.15f * w);
+            a.Arm(R, 0.15f, -0.45f, 0.2f, -0.1f, 0f, w);
+            a.Arm(L, 0.15f, -0.45f, 0.2f, -0.1f, 0f, w);
+            a.Head(-0.3f * w, 0f, 0f);
+            a.Crouch(0.15f, w);
+        }, Yaw: 1.1f, Face: "relaxed", FaceWeight: 0.6f),
+        ["arms_up_arch"] = new((a, w, t) =>
+        {
+            a.Lean(-0.28f * w, w);
+            a._rig.Rotate("Chest", a._rig.Left, -0.15f * w);
+            a.Arm(R, 2.8f, 0.1f, 0.15f, 0.1f, 0f, w);
+            a.Arm(L, 2.8f, 0.1f, 0.15f, 0.1f, 0f, w);
+            a.Head(-0.3f * w, 0f, 0f);
+            a.Crouch(0.15f, w);
+        }, Yaw: 1.1f, Face: "relaxed", FaceWeight: 0.6f),
+
+        // ---- Stretching, flexibility, gymnastics, yoga ---------------------------------
+        ["stretch_twist"] = new((a, w, t) =>
+        {
+            float s = MathF.Sin(t * 1.2f);
+            a.Arm(R, 2.8f, 0.2f, 0.15f, 0.15f, 0f, w);
+            a.Arm(L, 2.8f, 0.2f, 0.15f, 0.15f, 0f, w);
+            a._rig.Rotate("Spine", a._rig.Up, 0.35f * s * w);
+            a._rig.Rotate("Spine", a._rig.Forward, 0.12f * s * w);
+            a.Head(-0.15f * w, 0f, 0f);
+            a.Tiptoe(0.7f, w);
+        }, Yaw: 0.1f, Face: "relaxed", FaceWeight: 0.6f),
+        ["toe_touch"] = new((a, w, t) =>
+        {
+            a.BendForward(1.5f, w);
+            a.Arm(R, 0.05f, 1.6f, 0.05f, 0.15f, 0f, w);
+            a.Arm(L, 0.05f, 1.6f, 0.05f, 0.15f, 0f, w);
+            a.Head(0.3f * w, 0f, 0f);
+        }, Yaw: 1.25f, Face: "relaxed", FaceWeight: 0.5f),
+        ["i_balance"] = new((a, w, t) =>
+        {
+            a._rig.Rotate("RightUpperLeg", a._rig.Forward, 2.6f * w);
+            a._rig.Rotate("Spine", a._rig.Forward, -0.3f * w);
+            a._rig.Rotate("Hips", a._rig.Forward, -0.15f * w);
+            a.Arm(R, 2.7f, 0.1f, 0.15f, 0f, 0f, w);
+            a.Arm(L, 1.4f, 0.1f, 0.15f, 0f, 0f, w);
+            a.Head(0f, 0f, 0.15f * w);
+        }, Yaw: 0f, FaceWeight: 0.7f),
+        ["v_leg"] = new((a, w, t) =>
+        {
+            a._rig.Rotate("RightUpperLeg", a._rig.Forward, 1.4f * w);
+            a._rig.Rotate("RightFoot", a._rig.Left, 0.5f * w);
+            a._rig.Rotate("Spine", a._rig.Forward, -0.2f * w);
+            a.Arm(R, 1.5f, 0.2f, 0.15f, 0f, 0f, w);
+            a.Arm(L, 1.5f, 0.2f, 0.15f, 0f, 0f, w);
+        }, Yaw: 0f, FaceWeight: 0.8f),
+        ["front_split"] = new((a, w, t) =>
+        {
+            var left = a._rig.Left;
+            a._rig.OffsetHips(a._rig.Up * (-a._rig.HipHeight * 0.88f * w));
+            a._rig.Rotate("LeftUpperLeg", left, -1.57f * w);
+            a._rig.Rotate("RightUpperLeg", left, 1.57f * w);
+            a._rig.Rotate("LeftFoot", left, 0.7f * w);
+            a._rig.Rotate("RightFoot", left, 0.7f * w);
+            a.Lean(-0.1f * w, w);
+            a.Arm(R, 1.5f, 0.2f, 0.15f, 0f, 0f, w);
+            a.Arm(L, 1.5f, 0.2f, 0.15f, 0f, 0f, w);
+            a.Head(-0.1f * w, 0f, 0f);
+        }, Yaw: 1.4f, FaceWeight: 0.8f),
+        ["side_split"] = new((a, w, t) =>
+        {
+            var f = a._rig.Forward;
+            a._rig.OffsetHips(a._rig.Up * (-a._rig.HipHeight * 0.9f * w));
+            a._rig.Rotate("LeftUpperLeg", f, -1.5f * w);
+            a._rig.Rotate("RightUpperLeg", f, 1.5f * w);
+            a._rig.Rotate("LeftUpperLeg", a._rig.Up, 0.5f * w);
+            a._rig.Rotate("RightUpperLeg", a._rig.Up, -0.5f * w);
+            a.Lean(0.1f * w, w);
+            a.Arm(R, 0.1f, 0.5f, 0.1f, 0.2f, 0f, w);
+            a.Arm(L, 0.1f, 0.5f, 0.1f, 0.2f, 0f, w);
+        }, Yaw: 0f, FaceWeight: 0.8f),
+        ["standing_split"] = new((a, w, t) =>
+        {
+            a.BendForward(1.4f, w);
+            a._rig.Rotate("RightUpperLeg", a._rig.Left, 2.4f * w);
+            a._rig.Rotate("RightFoot", a._rig.Left, 0.6f * w);
+            a.Arm(R, 0.05f, 1.55f, 0.05f, 0.15f, 0f, w);
+            a.Arm(L, 0.05f, 1.55f, 0.05f, 0.15f, 0f, w);
+            a.Head(0.25f * w, 0f, 0f);
+        }, Yaw: 1.3f, FaceWeight: 0.6f),
+        ["bridge"] = new((a, w, t) =>
+        {
+            a.TableBase(0.35f, w);
+            a._rig.Rotate("Spine", a._rig.Left, -0.35f * w);
+            a._rig.Rotate("Chest", a._rig.Left, -0.3f * w);
+            a.Arm(R, 0.2f, 2.9f, 0.2f, 0f, 0f, w);
+            a.Arm(L, 0.2f, 2.9f, 0.2f, 0f, 0f, w);
+            a.Head(-0.4f * w, 0f, 0f);
+        }, Yaw: 1.45f, FaceWeight: 0.6f),
+        ["cat_stretch"] = new((a, w, t) =>
+        {
+            a.KneelBase(w);
+            var left = a._rig.Left;
+            a._rig.Rotate("Spine", left, 1.15f * w);
+            a._rig.Rotate("Chest", left, 0.25f * w);
+            a.Arm(R, 0.1f, 2.6f, 0.1f, 0.1f, 0f, w);
+            a.Arm(L, 0.1f, 2.6f, 0.1f, 0.1f, 0f, w);
+            a.Head(-0.5f * w, 0f, 0f);
+        }, Yaw: 1.4f, Face: "relaxed", FaceWeight: 0.6f),
+        ["table_pose"] = new((a, w, t) =>
+        {
+            a.TableBase(0f, w);
+            a.Arm(R, 0.15f, -1.5f, 0.05f, 0f, 0f, w);
+            a.Arm(L, 0.15f, -1.5f, 0.05f, 0f, 0f, w);
+            a.Head(-0.3f * w, 0f, 0f);
+        }, Yaw: 1.45f, FaceWeight: 0.6f),
     };
 
     private float _pose, _poseTime;
@@ -593,6 +851,51 @@ public sealed partial class ProceduralAnimator
         _rig.Rotate("RightFoot", left, (-0.35f + 0.8f * tiptoe) * w);
         _rig.Rotate("Spine", left, 0.4f * w);
         Head(-0.25f * w, 0f, 0f);
+    }
+
+    /// <summary>On the back, face up; the legs lie straight along the floor.</summary>
+    private void SupineBase(float w)
+    {
+        _rig.OffsetHips(_rig.Up * (-(_rig.HipHeight - 0.075f * _rig.Height) * w));
+        _rig.Rotate("Hips", _rig.Left, -MathF.PI / 2f * w);
+    }
+
+    /// <summary>On the stomach, face down; the legs lie straight along the floor.</summary>
+    private void ProneBase(float w)
+    {
+        _rig.OffsetHips(_rig.Up * (-(_rig.HipHeight - 0.085f * _rig.Height) * w));
+        _rig.Rotate("Hips", _rig.Left, MathF.PI / 2f * w);
+    }
+
+    /// <summary>On the side (lying on <paramref name="side"/>'s side), facing the viewer.</summary>
+    private void SideLieBase(int side, float w)
+    {
+        _rig.OffsetHips(_rig.Up * (-(_rig.HipHeight - 0.15f * _rig.Height) * w));
+        _rig.Rotate("Hips", _rig.Forward, -side * MathF.PI / 2f * w);
+    }
+
+    /// <summary>Bends at the hips, the legs kept straight under the body.</summary>
+    private void BendForward(float angle, float w)
+    {
+        var left = _rig.Left;
+        _rig.Rotate("Hips", left, angle * w);
+        _rig.Rotate("LeftUpperLeg", left, -angle * w);
+        _rig.Rotate("RightUpperLeg", left, -angle * w);
+    }
+
+    /// <summary>
+    /// Face up with the hips lifted, knees bent and the feet flat (a reverse table top;
+    /// <paramref name="lift"/> raises the hips further, toward a bridge).
+    /// </summary>
+    private void TableBase(float lift, float w)
+    {
+        var left = _rig.Left;
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * (0.46f - lift) * w));
+        _rig.Rotate("Hips", left, -MathF.PI / 2f * w);
+        _rig.Rotate("LeftLowerLeg", left, 1.57f * w);
+        _rig.Rotate("RightLowerLeg", left, 1.57f * w);
+        _rig.Rotate("LeftFoot", left, -0.0f * w);
+        _rig.Rotate("RightFoot", left, -0.0f * w);
     }
 
     /// <summary>Up on the toes (0–1).</summary>
