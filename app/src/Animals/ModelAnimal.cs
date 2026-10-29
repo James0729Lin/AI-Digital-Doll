@@ -343,7 +343,7 @@ public sealed class ModelAnimalPerformer : IPerformer
         Ease(ref _land, state == MascotState.Landing ? 1f : 0f, dt, 16f);
         Ease(ref _getUp, state == MascotState.GetUp ? 1f : 0f, dt, 6f);
         Ease(ref _slip, state == MascotState.Climb && grip == ClimbGrip.Slipping ? 1f : 0f, dt, 16f);
-        Ease(ref _hang, state == MascotState.Climb && grip == ClimbGrip.Hanging ? 1f : 0f, dt, 7f);
+        Ease(ref _hang, (state is MascotState.Climb or MascotState.Cling) && grip == ClimbGrip.Hanging ? 1f : 0f, dt, 7f);
         float push = -dragVelocityMetres * 1.5f;
         _dangleVelocity += (push - _dangle * 40f - _dangleVelocity * 5f) * dt;
         _dangle = Mathf.Clamp(_dangle + _dangleVelocity * dt, -0.9f, 0.9f);

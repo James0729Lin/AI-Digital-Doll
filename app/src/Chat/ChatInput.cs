@@ -109,7 +109,10 @@ public partial class ChatInput : Window
         screen = screen < 0 ? 0 : screen;
         float scale = Mathf.Clamp(DisplayServer.ScreenGetDpi(screen) / 96f, 1f, 3f);
         ContentScaleFactor = scale;
-        var size = (Vector2I)(new Vector2(520, 96) * scale);
+        // As big as the controls need (the AI list, field and buttons all in one row, the
+        // hint under them), and wide enough to leave the field room to type.
+        var content = GetContentsMinimumSize();
+        var size = (Vector2I)(new Vector2(MathF.Max(600f, content.X + 8f), content.Y + 6f) * scale);
         Size = size;
         var usable = DisplayServer.ScreenGetUsableRect(screen);
         Position = new Vector2I(

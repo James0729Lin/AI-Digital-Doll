@@ -663,17 +663,19 @@ public partial class MascotRoot : Node3D
     }
 
     /// <summary>
-    /// While climbing, how far the character is drawn away from its wall: knees and
-    /// hands reach toward the wall by different amounts on every model and in every
-    /// pose, so the drawn outline is measured and the character eased off the wall until
-    /// nothing pokes past it (past a screen edge it would be cut off).
+    /// While climbing a screen edge, how far the character is drawn away from it: knees
+    /// and hands reach toward the wall by different amounts on every model and in every
+    /// pose, so the drawn outline is measured and the character eased off the edge until
+    /// nothing pokes past it (it would be cut off). A window side needs none: reaching
+    /// over the window is drawn, and she should hold on to it, not hover beside it.
     /// </summary>
     private float UpdateWallShift(float dt)
     {
         var brain = _brain!;
         float target = 0f;
-        if (brain.State is MascotState.Climb or MascotState.Cling && brain.WallId is long id
-            && brain.Surroundings.FindWall(id) is Wall wall && _tight.Length >= 3)
+        if (brain.State is MascotState.Climb or MascotState.Cling
+            && brain.WallId is Surroundings.LeftWallId or Surroundings.RightWallId
+            && brain.Surroundings.FindWall(brain.WallId.Value) is Wall wall && _tight.Length >= 3)
         {
             float extreme = wall.Side > 0 ? _tight.Max(p => p.X) : _tight.Min(p => p.X);
             // A few pixels' gap so a reaching limb does not touch the edge.

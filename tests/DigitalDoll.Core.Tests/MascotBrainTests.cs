@@ -382,6 +382,32 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void OnAWindowSideTheHandsStayOnTheWindowAndItHeavesUpOverTheTop()
+    {
+        // A window whose left side reaches the floor; its top is at 500.
+        var surroundings = WithWindow(500, 500, 1400, 1100);
+        var wall = surroundings.Walls.First(w => w.TopPlatform != null && w.X < 600f);
+        bool heaved = false, onTop = false;
+        foreach (int seed in Enumerable.Range(1, 30))
+        {
+            var brain = Create(seed, startX: 450f, surroundings: surroundings);
+            for (int i = 0; i < 60 * 600 && !onTop; i++)
+            {
+                var before = brain.State;
+                brain.Update(1f / 60f);
+                if (brain.WallId == wall.Id && brain.State is MascotState.Climb or MascotState.Cling)
+                    Assert.True(brain.Y >= wall.Top + Tuning.HandReach - 0.5f, $"feet at {brain.Y}: the hands would be above the window");
+                if (before is MascotState.Climb or MascotState.Cling && brain.State == MascotState.Jump)
+                    heaved = true;
+                onTop = heaved && brain.PlatformId == wall.TopPlatform && brain.State is MascotState.Landing or MascotState.Idle;
+            }
+            if (onTop)
+                break;
+        }
+        Assert.True(onTop, "it should climb the side and heave up onto the top");
+    }
+
+    [Fact]
     public void CannotPoseInTheAir()
     {
         var brain = Create();

@@ -148,7 +148,7 @@ public sealed partial class ProceduralAnimator : IPerformer
         if (grip == ClimbGrip.Steady)
             _climbPhase = (_climbPhase + dt * Mathf.Tau * MathF.Abs(climbSpeedMetres) / (0.55f * _rig.Height)) % Mathf.Tau;
         Ease(ref _slip, state == MascotState.Climb && grip == ClimbGrip.Slipping ? 1f : 0f, dt, 16f);
-        Ease(ref _hang, state == MascotState.Climb && grip == ClimbGrip.Hanging ? 1f : 0f, dt, 7f);
+        Ease(ref _hang, (state is MascotState.Climb or MascotState.Cling) && grip == ClimbGrip.Hanging ? 1f : 0f, dt, 7f);
         Ease(ref _climbUp, state == MascotState.Climb && grip == ClimbGrip.Steady && climbSpeedMetres < 0f ? 1f : 0f, dt, 4f);
         Ease(ref _idle, state == MascotState.Idle ? 1f : 0f, dt);
         Ease(ref _walk, state == MascotState.Walk ? 1f : 0f, dt);

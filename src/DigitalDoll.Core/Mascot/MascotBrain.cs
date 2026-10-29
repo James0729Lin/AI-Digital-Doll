@@ -96,6 +96,9 @@ public sealed class MascotTuning
     public float JumpUp => Height * 1.4f;
     public float JumpAcross => Height * 1.6f;
     public float GrabDistance => Height * 0.18f;
+
+    /// <summary>How far above the feet the hands reach while climbing (arms up).</summary>
+    public float HandReach => Height * 0.9f;
 }
 
 /// <summary>
@@ -203,10 +206,23 @@ public sealed class MascotBrain
     public bool ControlledFall => State == MascotState.Falling && _controlledFall;
 
     /// <summary>While climbing: slipping down, hanging on after a slip, or climbing normally.</summary>
-    public ClimbGrip Grip => State != MascotState.Climb ? ClimbGrip.Steady
+    public ClimbGrip Grip => State == MascotState.Cling ? (AtLedge ? ClimbGrip.Hanging : ClimbGrip.Steady)
+        : State != MascotState.Climb ? ClimbGrip.Steady
         : _slipTime > 0f ? ClimbGrip.Slipping
         : _hangTime > 0f ? ClimbGrip.Hanging
         : ClimbGrip.Steady;
+
+    /// <summary>Holding on with the hands on the top edge of the wall.</summary>
+    private bool AtLedge => _wallId is long id && Surroundings.FindWall(id) is Wall w
+        && w.TopPlatform != null && w.Bottom - w.Top > _tuning.HandReach && Y <= Highest(w) + 2f;
+
+    /// <summary>
+    /// The highest the feet go on a wall. On a window's side: the hands on its top edge,
+    /// as there is nothing to hold above it (or the wall's foot, when the wall is shorter
+    /// than the reach). The screen edges already leave room for the head at their top.
+    /// </summary>
+    private float Highest(Wall wall) =>
+        wall.TopPlatform is null ? wall.Top : MathF.Min(wall.Top + _tuning.HandReach, wall.Bottom);
 
     /// <summary>The pose being held (an id from <c>PoseCatalog</c>) while the state is <see cref="MascotState.Pose"/>.</summary>
     public string? PoseId { get; private set; }
@@ -258,8 +274,8 @@ public sealed class MascotBrain
             if (next.FindWall(wallId) is Wall wall)
             {
                 X = wall.X - wall.Side * _tuning.WallOffset;
-                Y = Math.Clamp(Y, wall.Top, wall.Bottom);
-                TargetY = Math.Clamp(TargetY, wall.Top, wall.Bottom);
+                Y = Math.Clamp(Y, Highest(wall), wall.Bottom);
+                TargetY = Math.Clamp(TargetY, Highest(wall), wall.Bottom);
             }
             else
             {
@@ -487,7 +503,7 @@ public sealed class MascotBrain
         {
             float away = fromY < Y ? 1f : -1f;
             float target = Y + away * _tuning.Height * 1.2f;
-            if (target < wall.Top || target > wall.Bottom)
+            if (target < Highest(wall) || target > wall.Bottom)
                 target = Y - away * _tuning.Height * 1.2f;
             StartClimb(wall, target);
             return;
@@ -884,7 +900,7 @@ public sealed class MascotBrain
         WallSide = wall.Side;
         Facing = wall.Side;
         X = wall.X - wall.Side * _tuning.WallOffset;
-        TargetY = Math.Clamp(targetY, wall.Top, wall.Bottom);
+        TargetY = Math.Clamp(targetY, Highest(wall), wall.Bottom);
         VelocityX = 0f;
         _slipTime = _hangTime = 0f;
         SetState(MascotState.Climb);
@@ -897,7 +913,7 @@ public sealed class MascotBrain
         WallSide = wall.Side;
         Facing = wall.Side;
         X = wall.X - wall.Side * _tuning.WallOffset;
-        Y = Math.Clamp(y, wall.Top, wall.Bottom);
+        Y = Math.Clamp(y, Highest(wall), wall.Bottom);
         VelocityX = 0f;
         VelocityY = 0f;
         _waitDuration = Lerp(2f, 6f, (float)_random.NextDouble());
@@ -969,13 +985,11 @@ public sealed class MascotBrain
             }
             if (_wallId is long id && Surroundings.FindWall(id) is Wall wall)
             {
-                // At the top edge of a window: pull up onto it.
-                if (!Staying && MathF.Abs(Y - wall.Top) < 1f && wall.TopPlatform is long top && Surroundings.FindPlatform(top) is Platform platform)
+                // Hands on the top edge of a window: heave up onto it.
+                if (!Staying && MathF.Abs(Y - Highest(wall)) < 1f && wall.TopPlatform is long top && Surroundings.FindPlatform(top) is Platform platform)
                 {
-                    LeaveWall();
-                    X = Math.Clamp(wall.X + wall.Side * _tuning.Height * 0.15f, platform.X0, platform.X1);
-                    Y = platform.Y;
-                    Land(platform);
+                    float onto = Math.Clamp(wall.X + wall.Side * _tuning.Height * 0.15f, platform.X0, platform.X1);
+                    StartJump(platform, onto);
                     return;
                 }
                 StartCling(wall, Y);
@@ -1008,7 +1022,7 @@ public sealed class MascotBrain
     private void StartJumpToWall(Wall wall)
     {
         // Aim a little above the bottom of the side so the hands find something to hold.
-        float y = MathF.Max(wall.Top, wall.Bottom - _tuning.Height * 0.15f);
+        float y = MathF.Min(wall.Bottom, MathF.Max(Highest(wall), wall.Bottom - _tuning.Height * 0.15f));
         StartJump(new Platform(-99, X, X, y), X);
         _jumpWall = wall;
     }
@@ -1211,7 +1225,7 @@ public sealed class MascotBrain
 
     private float PickWallTarget(Wall wall, float? below = null)
     {
-        float top = below ?? wall.Top;
+        float top = MathF.Max(below ?? wall.Top, Highest(wall));
         float bottom = MathF.Max(top, wall.Bottom - _tuning.Height * 0.2f);
         return Lerp(top, bottom, (float)_random.NextDouble());
     }
