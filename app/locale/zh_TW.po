@@ -230,3 +230,18 @@ msgstr "動作"
 
 msgid "CHAT_ACTIONS_TIP"
 msgstr "選一個動作讓她做"
+
+msgid "CHAT_HISTORY"
+msgstr "對話紀錄"
+
+msgid "CHAT_CLEAR"
+msgstr "清除全部"
+
+msgid "CHAT_CLEAR_CONFIRM"
+msgstr "要刪除全部對話紀錄嗎？刪除後無法復原。"
+
+msgid "CHAT_NO_HISTORY"
+msgstr "還沒有對話，跟她打個招呼吧！"
+
+msgid "CHAT_DELETE_TIP"
+msgstr "刪除這則訊息"

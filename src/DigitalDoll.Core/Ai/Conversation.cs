@@ -35,6 +35,14 @@ public sealed class Conversation
 
     public void Clear() => _turns.Clear();
 
+    /// <summary>Starts over from these turns (the history after a message was deleted), within the limits.</summary>
+    public void Replace(IEnumerable<ChatTurn> turns)
+    {
+        _turns.Clear();
+        foreach (var turn in turns)
+            Add(turn);
+    }
+
     private void Add(ChatTurn turn)
     {
         // Two user turns in a row (an earlier question failed): keep the newer one.
