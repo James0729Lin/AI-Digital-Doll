@@ -140,6 +140,10 @@ public sealed class MascotBrain
     private bool _poseGrounded;
     private string? _lastRandomPose;
     private Action? _onLanded;
+    private Platform? _pin;
+
+    /// <summary>The invisible platform the mascot stands on where it was put down with <see cref="PinAt"/>.</summary>
+    public const long PinId = -10;
     private float _climbStroke, _slipTime, _hangTime;
     private (float X, bool Run)? _afterGetUp;
 
@@ -218,6 +222,9 @@ public sealed class MascotBrain
     /// </summary>
     public void SetSurroundings(Surroundings next)
     {
+        // Put down somewhere: that spot stays under its feet whatever the windows do.
+        if (_pin is Platform pin)
+            next = next.With(pin);
         var previous = Surroundings;
         Surroundings = next;
 
@@ -544,9 +551,37 @@ public sealed class MascotBrain
             EnterIdle();
     }
 
+    /// <summary>
+    /// Puts the mascot down at (x, y) and keeps it there, standing in mid-air if need be:
+    /// it idles, poses and dances on the spot but never walks off, until it is picked up.
+    /// </summary>
+    public void PinAt(float x, float y)
+    {
+        x = Math.Clamp(x, 0f, Surroundings.Width);
+        y = Math.Clamp(y, _tuning.Height * 0.5f, Surroundings.Height - 1f);
+        float half = _tuning.Height * 0.35f;
+        _pin = new Platform(PinId, x - half, x + half, y);
+        Surroundings = Surroundings.With(_pin.Value);
+        LeaveWall();
+        _plan = Plan.None;
+        _onLanded = null;
+        X = x;
+        Y = y;
+        PlatformId = PinId;
+        EnterIdle(shortWait: true);
+    }
+
+    /// <summary>True while the mascot stays where it was put down with <see cref="PinAt"/>.</summary>
+    public bool Pinned => _pin != null && PlatformId == PinId;
+
     public void BeginDrag()
     {
         _onLanded = null;
+        if (_pin != null)
+        {
+            _pin = null;
+            Surroundings = Surroundings.Without(PinId);
+        }
         VelocityX = 0f;
         VelocityY = 0f;
         PlatformId = null;
@@ -589,6 +624,16 @@ public sealed class MascotBrain
         if (PlatformId is not long id || Surroundings.FindPlatform(id) is not Platform here)
         {
             StartFalling(0f, 0f);
+            return;
+        }
+
+        if (id == PinId)
+        {
+            // Put down on a spot of its own: it stays there.
+            var stay = new List<(float Weight, Action Act)> { (2f, () => EnterIdle()), (0.5f, StartDance) };
+            if (_tuning.RandomPoses)
+                stay.Add((1.2f, () => StrikeRandomPose(here)));
+            Choose(stay);
             return;
         }
 

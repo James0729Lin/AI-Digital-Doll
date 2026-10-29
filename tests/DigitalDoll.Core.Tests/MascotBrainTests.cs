@@ -342,6 +342,46 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void PutDownInMidAirItStaysThere()
+    {
+        foreach (int seed in new[] { 1, 2, 3 })
+        {
+            var tuning = new MascotTuning { Height = Character, RandomPoses = true };
+            var brain = new MascotBrain(tuning, new Random(seed), 960f, Screen());
+            brain.BeginDrag();
+            brain.DragTo(700f, 400f);
+            brain.PinAt(700f, 400f);
+            Assert.True(brain.Pinned);
+            for (int i = 0; i < 60 * 120; i++)
+            {
+                brain.Update(1f / 60f);
+                // The windows are refreshed several times a second: the spot stays.
+                if (i % 15 == 0)
+                    brain.SetSurroundings(Screen());
+                Assert.Equal(400f, brain.Y);
+                Assert.InRange(brain.X, 700f - Character * 0.35f, 700f + Character * 0.35f);
+                Assert.True(brain.State is not (MascotState.Falling or MascotState.Walk or MascotState.Climb), brain.State.ToString());
+            }
+        }
+    }
+
+    [Fact]
+    public void PickedUpFromItsSpotItFallsAsUsual()
+    {
+        var brain = Create();
+        brain.BeginDrag();
+        brain.PinAt(700f, 400f);
+        brain.BeginDrag();
+        Assert.False(brain.Pinned);
+        brain.DragTo(700f, 400f);
+        brain.EndDrag(0f, 0f);
+        Assert.Equal(MascotState.Falling, brain.State);
+        Run(brain, 2f);
+        Assert.True(brain.OnFloor);
+        Assert.Null(brain.Surroundings.FindPlatform(MascotBrain.PinId));
+    }
+
+    [Fact]
     public void CannotPoseInTheAir()
     {
         var brain = Create();

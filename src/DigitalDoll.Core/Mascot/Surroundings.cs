@@ -49,6 +49,14 @@ public sealed class Surroundings
 
     public Platform Floor => Platforms.First(p => p.Id == FloorId);
 
+    /// <summary>The same surroundings with <paramref name="platform"/> added (replacing one with its id).</summary>
+    public Surroundings With(Platform platform) =>
+        new(Width, Height, Platforms.Where(p => p.Id != platform.Id).Append(platform).ToList(), Walls);
+
+    /// <summary>The same surroundings without the platform <paramref name="id"/>.</summary>
+    public Surroundings Without(long id) =>
+        new(Width, Height, Platforms.Where(p => p.Id != id).ToList(), Walls);
+
     public Platform? FindPlatform(long id)
     {
         foreach (var p in Platforms)
