@@ -126,6 +126,8 @@ public partial class MascotRoot : Node3D
         }
 
         BuildMenu();
+        if (_snapshot == null)
+            CreateHandles();
         GetNode<StatusIndicator>("Tray").Pressed += OnTrayPressed;
         _fileDialog.FileSelected += path => LoadCharacter(path, persist: true);
         GetWindow().FilesDropped += files =>
@@ -179,7 +181,7 @@ public partial class MascotRoot : Node3D
             }
         }
 
-        if (_pressed && !_dragging)
+        if (_pressed && !_dragging && _grip == Grip.None)
         {
             _pressTime += dt;
             if (CursorInWindow().DistanceTo(_pressCursor) > DragThreshold || _pressTime > HoldToDrag)
@@ -197,6 +199,8 @@ public partial class MascotRoot : Node3D
             UpdateTouch(dt);
 
         _brain.Update(dt);
+        if (_snapshot == null)
+            UpdateSpin(dt);
         // The brain picks the pose (asked for, or now and then on its own); the body holds it.
         if (_brain.State == MascotState.Pose && _brain.PoseId is string poseId)
             _animator.StrikePose(poseId);
@@ -211,6 +215,7 @@ public partial class MascotRoot : Node3D
 
         if (_snapshot == null)
         {
+            UpdateHandles(dt);
             UpdateHitRegion();
             bool calm = _brain.State == MascotState.Idle && !_dragging;
             Engine.MaxFps = calm ? 30 : 60;
@@ -237,6 +242,12 @@ public partial class MascotRoot : Node3D
             }
             else if (button.ButtonIndex == MouseButton.Left && button.Pressed)
             {
+                // The move and rotate handles first.
+                if (PressHandle(CursorInWindow()))
+                {
+                    _pressed = true;
+                    return;
+                }
                 // Picked up only once the cursor moves or the button is held; a quick
                 // click is a poke.
                 _pressed = true;
@@ -245,6 +256,8 @@ public partial class MascotRoot : Node3D
             }
             else if (button.ButtonIndex == MouseButton.Left && !button.Pressed)
             {
+                if (ReleaseHandle())
+                    return;
                 if (_dragging)
                 {
                     _dragging = false;
@@ -641,11 +654,12 @@ public partial class MascotRoot : Node3D
         float x = _snapshot != null ? _windowSize.X * 0.5f : brain.X + UpdateWallShift(dt);
         _pivot.Position = ScreenToWorld(new Vector2(x, brain.Y));
 
-        float target = _body!.Yaw(brain.State, brain.Facing, brain.WallSide, Facing0);
+        float target = _body!.Yaw(brain.State, brain.Facing, brain.WallSide, Facing0) + _userYaw;
         if (_snapshot?.Yaw is float yaw)
             target = yaw;
-        _yaw = Mathf.Lerp(_yaw, target, 1f - MathF.Exp(-8f * dt));
-        _pivot.Rotation = new Vector3(0f, _yaw, 0f);
+        // Turned by the user: follow the (already weighted) turn directly.
+        _yaw = Spinning ? target : Mathf.Lerp(_yaw, target, 1f - MathF.Exp(-8f * dt));
+        ApplyTip(_pivot.Position);
     }
 
     /// <summary>
@@ -704,7 +718,8 @@ public partial class MascotRoot : Node3D
         // Windows: take the mouse while it is over the character (or holding it), let it
         // through everywhere else; the window keeps its full shape, so nothing flickers.
         var cursor = CursorInWindow();
-        bool over = _dragging || _pressed || (_tight.Length >= 3 && Geometry2D.IsPointInPolygon(cursor, _tight));
+        bool over = _dragging || _pressed || _grip != Grip.None || HandleAt(cursor) != 0
+            || (_tight.Length >= 3 && Geometry2D.IsPointInPolygon(cursor, _tight));
         if (_clickThrough != !over && WindowsNative.SetClickThrough(DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle), !over))
             _clickThrough = !over;
         if (_clickThrough != null || _dragging)
