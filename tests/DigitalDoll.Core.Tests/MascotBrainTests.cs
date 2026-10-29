@@ -303,6 +303,45 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void RequestsOnAWallAreCarriedOutAfterHoppingDown()
+    {
+        var brain = Create();
+        brain.BeginDrag();
+        brain.DragTo(10f, 500f);
+        brain.EndDrag(0f, 0f);
+        Assert.Equal(MascotState.Cling, brain.State);
+
+        brain.Dance();
+        Assert.Equal(MascotState.Falling, brain.State);
+        Assert.True(brain.ControlledFall);
+        bool danced = false;
+        for (int i = 0; i < 60 * 8 && !danced; i++)
+        {
+            brain.Update(1f / 60f);
+            danced = brain.State == MascotState.Dance;
+        }
+        Assert.True(danced, "it should dance once it has landed");
+        Assert.True(brain.OnFloor);
+
+        // A pose asked for while falling is struck on landing too.
+        brain.BeginDrag();
+        brain.DragTo(900f, 600f);
+        brain.EndDrag(0f, 0f);
+        Assert.True(brain.StrikePose(grounded: false, seconds: 3f, id: "salute"));
+        bool posed = false;
+        for (int i = 0; i < 60 * 8 && !posed; i++)
+        {
+            brain.Update(1f / 60f);
+            posed = brain.State == MascotState.Pose && brain.PoseId == "salute";
+        }
+        Assert.True(posed);
+
+        // Being carried cancels what was asked for in the air.
+        brain.BeginDrag();
+        Assert.False(brain.StrikePose(grounded: false, seconds: 3f, id: "salute"));
+    }
+
+    [Fact]
     public void CannotPoseInTheAir()
     {
         var brain = Create();

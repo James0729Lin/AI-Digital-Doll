@@ -46,6 +46,7 @@ public partial class ChatController : Node
         AddChild(_input);
         _input.Submitted += Ask;
         _input.StopRequested += Stop;
+        _input.ActionPicked += action => _root.PerformCommand(action);
         _settingsWindow = new AiSettingsWindow();
         AddChild(_settingsWindow);
         _settingsWindow.Saved += saved => _settings = saved;

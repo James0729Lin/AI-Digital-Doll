@@ -176,3 +176,57 @@ msgstr "Chicken"
 
 msgid "ANIMAL_PIG"
 msgstr "Pig"
+
+msgid "MENU_ACTIONS"
+msgstr "Actions"
+
+msgid "ACTION_GROUP_BODY"
+msgstr "Whole body"
+
+msgid "BODY_COME"
+msgstr "Come here"
+
+msgid "BODY_DANCE"
+msgstr "Dance"
+
+msgid "BODY_SIT"
+msgstr "Sit down"
+
+msgid "BODY_FLOOR_SIT"
+msgstr "Sit on the floor"
+
+msgid "BODY_LIE"
+msgstr "Lie down"
+
+msgid "BODY_GET_UP"
+msgstr "Get up"
+
+msgid "POSE_GROUP_CUTE"
+msgstr "Cute gestures"
+
+msgid "POSE_GROUP_STANDING"
+msgstr "Standing"
+
+msgid "POSE_GROUP_KNEELING"
+msgstr "Kneeling"
+
+msgid "POSE_GROUP_SITTING"
+msgstr "Sitting"
+
+msgid "POSE_GROUP_SQUATTING"
+msgstr "Squatting"
+
+msgid "POSE_GROUP_LYING"
+msgstr "Lying down"
+
+msgid "POSE_GROUP_BENDING"
+msgstr "Bending & twisting"
+
+msgid "POSE_GROUP_STRETCHING"
+msgstr "Stretching & gymnastics"
+
+msgid "CHAT_ACTIONS"
+msgstr "Actions"
+
+msgid "CHAT_ACTIONS_TIP"
+msgstr "Pick something for her to do"

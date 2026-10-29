@@ -737,6 +737,7 @@ public partial class MascotRoot : Node3D
         _menu.Clear();
         _menu.AddItem(Tr("MENU_CHAT"), MenuChat);
         _menu.AddItem(Tr("MENU_AI_SETTINGS"), MenuAiSettings);
+        _menu.AddSubmenuNodeItem(Tr("MENU_ACTIONS"), Chat.ActionMenu.Create(key => Tr(key), PerformCommand));
         _menu.AddSeparator();
         if (BodyEditorEnabled)
         {

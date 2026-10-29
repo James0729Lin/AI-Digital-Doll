@@ -176,3 +176,57 @@ msgstr "小雞"
 
 msgid "ANIMAL_PIG"
 msgstr "小豬"
+
+msgid "MENU_ACTIONS"
+msgstr "動作"
+
+msgid "ACTION_GROUP_BODY"
+msgstr "全身動作"
+
+msgid "BODY_COME"
+msgstr "過來"
+
+msgid "BODY_DANCE"
+msgstr "跳舞"
+
+msgid "BODY_SIT"
+msgstr "坐下"
+
+msgid "BODY_FLOOR_SIT"
+msgstr "坐在地上"
+
+msgid "BODY_LIE"
+msgstr "躺下"
+
+msgid "BODY_GET_UP"
+msgstr "起來"
+
+msgid "POSE_GROUP_CUTE"
+msgstr "可愛手勢"
+
+msgid "POSE_GROUP_STANDING"
+msgstr "站姿"
+
+msgid "POSE_GROUP_KNEELING"
+msgstr "跪姿"
+
+msgid "POSE_GROUP_SITTING"
+msgstr "坐姿"
+
+msgid "POSE_GROUP_SQUATTING"
+msgstr "蹲姿"
+
+msgid "POSE_GROUP_LYING"
+msgstr "躺姿"
+
+msgid "POSE_GROUP_BENDING"
+msgstr "前彎與扭轉"
+
+msgid "POSE_GROUP_STRETCHING"
+msgstr "伸展與體操"
+
+msgid "CHAT_ACTIONS"
+msgstr "動作"
+
+msgid "CHAT_ACTIONS_TIP"
+msgstr "選一個動作讓她做"

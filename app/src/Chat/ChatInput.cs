@@ -22,6 +22,9 @@ public partial class ChatInput : Window
     public event Action<string, string?>? Submitted;
     public event Action? StopRequested;
 
+    /// <summary>An action picked from the Actions button (an id as the chat commands use).</summary>
+    public event Action<string>? ActionPicked;
+
     public override void _Ready()
     {
         Title = Tr("CHAT_TITLE");
@@ -49,6 +52,17 @@ public partial class ChatInput : Window
         };
         _field.TextSubmitted += _ => Send();
         row.AddChild(_field);
+        // Actions right next to the field: pick one instead of typing it.
+        var actionMenu = ActionMenu.Create(key => Tr(key), id => ActionPicked?.Invoke(id));
+        AddChild(actionMenu);
+        var actions = new Button { Text = Tr("CHAT_ACTIONS"), TooltipText = Tr("CHAT_ACTIONS_TIP") };
+        actions.Pressed += () =>
+        {
+            var at = actions.GetScreenPosition() + new Vector2(0f, actions.Size.Y * ContentScaleFactor);
+            actionMenu.Position = (Vector2I)at;
+            actionMenu.Popup();
+        };
+        row.AddChild(actions);
         _send = new Button { Text = Tr("CHAT_SEND") };
         _send.Pressed += () =>
         {
