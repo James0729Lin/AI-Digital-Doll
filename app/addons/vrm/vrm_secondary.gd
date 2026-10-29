@@ -291,6 +291,11 @@ func tick_spring_bones(delta: float) -> void:
 		if spring_bones != parent.spring_bones:
 			spring_bones = parent.spring_bones
 			needs_reintialize = true
+	# DigitalDoll: the floor the spring bones stay above.
+	if is_child_of_vrm:
+		var floor_y: float = get_parent().get("springbone_floor_y") if get_parent().get("springbone_floor_y") != null else -1e9
+		for sb in spring_bones_internal:
+			sb.floor_y = floor_y
 	if modify_gravity:
 		for sb in spring_bones_internal:
 			sb.add_force = springbone_add_force

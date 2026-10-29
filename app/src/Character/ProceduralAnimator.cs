@@ -65,6 +65,18 @@ public sealed partial class ProceduralAnimator : IPerformer
     /// <summary>Downward pull on spring bones when fully lying, in skeleton units per second.</summary>
     private const float DrapeForce = 2.5f;
     private float _drapeApplied;
+    private bool? _floorApplied;
+
+    /// <summary>Floor height for the spring bones in skeleton units (the feet stand at 0).</summary>
+    private const float FloorClearance = 0.01f;
+
+    /// <summary>
+    /// The torso's measured outline: arms that would pass into the body (hands on the
+    /// chest, arms folded under it) are swung forward until they rest outside it.
+    /// </summary>
+    public TorsoShape? Torso { get; set; }
+
+    private readonly float[] _armFix = new float[2];
 
     /// <summary>Plays small idle motions (stretching, looking around…) now and then.</summary>
     public bool Fidgets { get; set; } = true;
@@ -177,19 +189,66 @@ public sealed partial class ProceduralAnimator : IPerformer
         PoseTalking();
         PoseGestures();
         PoseHead();
+        ApplyArmFix();
         _rig.Commit();
+        MeasureArmFix(dt);
 
         UpdateFace(dt);
         UpdateDrape();
+    }
+
+    private void ApplyArmFix()
+    {
+        if (Torso == null)
+            return;
+        _rig.Rotate("LeftUpperArm", _rig.Left, -_armFix[0]);
+        _rig.Rotate("RightUpperArm", _rig.Left, -_armFix[1]);
+    }
+
+    /// <summary>
+    /// After posing: how deep each hand and forearm went into the torso. The arm is swung
+    /// forward by about that much next frame (quickly), and eased back once it is clear
+    /// (slowly, so it settles resting on the body instead of bouncing off it).
+    /// </summary>
+    private void MeasureArmFix(float dt)
+    {
+        if (Torso == null)
+            return;
+        for (int i = 0; i < 2; i++)
+        {
+            string side = i == 0 ? "Left" : "Right";
+            var elbow = _rig.BonePosition(side + "LowerArm");
+            var wrist = _rig.BonePosition(side + "Hand");
+            var fingers = wrist + (wrist - elbow) * 0.35f;
+            float reach = MathF.Max(0.1f, _rig.BonePosition(side + "UpperArm").DistanceTo(wrist));
+            float depth = MathF.Max(MathF.Max(Torso.Depth(fingers, 0.02f), Torso.Depth(wrist, 0.025f)),
+                MathF.Max(Torso.Depth((elbow + wrist) * 0.5f, 0.025f), Torso.Depth(elbow, 0.02f)));
+            if (depth > 0f)
+                _armFix[i] = MathF.Min(_armFix[i] + depth / reach * MathF.Min(1f, 20f * dt) * 1.5f, 1.1f);
+            else
+                _armFix[i] *= MathF.Exp(-0.6f * dt);
+        }
     }
 
     private void UpdateDrape()
     {
         if (Springs == null)
             return;
+        // The ground under the feet stops the skirt and hair; not while sitting on an edge
+        // (the legs and skirt hang over it), climbing, carried or in the air.
+        bool grounded = _state is not (MascotState.Sit or MascotState.Climb or MascotState.Cling
+            or MascotState.Dragged or MascotState.Falling or MascotState.Jump);
+        if (grounded != _floorApplied)
+        {
+            _floorApplied = grounded;
+            Springs.Set("springbone_floor_y", grounded ? FloorClearance : -1e9f);
+        }
         // Lying down the skirt and hair fall toward the floor; sitting, the skirt settles
         // over the lap instead of flaring up.
         float drape = MathF.Max(MathF.Max(MathF.Max(_lie, _sprawl), 0.3f * _tumble), 0.9f * MathF.Max(_sit, _floorSit));
+        // Held poses: fully when lying, partly on the ground (sitting, kneeling, squatting).
+        if (_poseId != null && PoseCatalog.Find(_poseId) is PoseInfo held)
+            drape = MathF.Max(drape, _pose * held.Base switch { DigitalDoll.Core.Acting.PoseBase.Lie => 1f, DigitalDoll.Core.Acting.PoseBase.Stand => 0f, _ => 0.7f });
         if (drape < 0.01f)
             drape = 0f;
         // Only touch the springs when the pull changes (and always settle back to exactly zero).

@@ -62,6 +62,8 @@ class SpringBoneRuntimeState:
 	var gravity_multiplier: float = 1.0
 	var gravity_rotation: Quaternion = Quaternion.IDENTITY
 	var add_force: Vector3 = Vector3.ZERO
+	# DigitalDoll: floor height in skeleton space (below -1e8: none).
+	var floor_y: float = -1e9
 
 	var joint_nodes: PackedStringArray
 	var cached_center_bone: String
@@ -165,7 +167,7 @@ class SpringBoneRuntimeState:
 			pfa = springbone.hit_radius
 			verlets[i].radius = springbone.hit_radius_scale * (1.0 if pfa.is_empty() else pfa[i] if i < len(pfa) else pfa[-1])
 
-			verlets[i].update(skel, center_transform, center_transform_inv, stiffness, drag_force, external, tmp_colliders)
+			verlets[i].update(skel, center_transform, center_transform_inv, stiffness, drag_force, external, tmp_colliders, floor_y)
 
 
 func create_runtime(skel: Skeleton3D) -> SpringBoneRuntimeState:

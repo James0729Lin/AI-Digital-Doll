@@ -65,7 +65,7 @@ func pre_update(skel: Skeleton3D) -> void:
 	global_pose = get_global_pose(skel)
 
 
-func update(skel: Skeleton3D, center_transform: Transform3D, center_transform_inv: Transform3D, stiffness_force: float, drag_force: float, external: Vector3, colliders: Array[vrm_collider.VrmRuntimeCollider]) -> void:
+func update(skel: Skeleton3D, center_transform: Transform3D, center_transform_inv: Transform3D, stiffness_force: float, drag_force: float, external: Vector3, colliders: Array[vrm_collider.VrmRuntimeCollider], floor_y: float = -1e9) -> void:
 	var tmp_current_tail: Vector3 = current_tail
 	var tmp_prev_tail: Vector3 = prev_tail
 	if ClassDB.class_exists(&"SkeletonModifier3D"):
@@ -85,6 +85,15 @@ func update(skel: Skeleton3D, center_transform: Transform3D, center_transform_in
 	# Collision movement
 	for collider in colliders:
 		next_tail = collider.collision(origin, radius, length, next_tail)
+
+	# DigitalDoll: keep the tail above the floor (tails live in the space that
+	# center_transform maps skeleton positions into).
+	if floor_y > -1e8:
+		var skel_tail: Vector3 = center_transform_inv * next_tail
+		if skel_tail.y < floor_y + radius:
+			skel_tail.y = floor_y + radius
+			next_tail = center_transform * skel_tail
+			next_tail = origin + (next_tail - origin).normalized() * length
 
 	# Recording current tails for next process
 	prev_tail = current_tail  # center_transform_inv * current_tail

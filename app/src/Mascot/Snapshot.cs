@@ -170,9 +170,24 @@ internal sealed class Snapshot
                 });
                 break;
             case "strike":
-                // A pose from the catalog, held (see --strike).
+                // A pose from the catalog, held (see --strike), on a ledge in the middle of
+                // the frame so anything poking through the surface (skirt, legs) shows.
                 if (_strike != null && PoseCatalog.Find(_strike) is PoseInfo pose)
+                {
+                    float shelf = window.Y * 0.9f;
+                    brain.SetSurroundings(new Surroundings(window.X, window.Y,
+                        new[]
+                        {
+                            new DigitalDoll.Core.Mascot.Platform(Surroundings.FloorId, 0f, window.X, window.Y - 1f),
+                            new DigitalDoll.Core.Mascot.Platform(1, 0f, window.X, shelf),
+                        }, Array.Empty<Wall>()));
+                    brain.BeginDrag();
+                    brain.DragTo(centre, shelf - 1f);
+                    brain.EndDrag(0f, 0f);
+                    for (int i = 0; i < 60 && brain.State == MascotState.Falling; i++)
+                        brain.Update(1f / 60f);
                     brain.StrikePose(pose.Base != PoseBase.Stand, float.MaxValue, pose.Id);
+                }
                 break;
             case "land":
                 brain.BeginDrag();
