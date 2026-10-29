@@ -139,6 +139,7 @@ public sealed class MascotBrain
     private bool _controlledFall;
     private bool _poseGrounded;
     private string? _lastRandomPose;
+    private Action? _onLanded;
     private float _climbStroke, _slipTime, _hangTime;
     private (float X, bool Run)? _afterGetUp;
 
@@ -344,6 +345,8 @@ public sealed class MascotBrain
     /// <summary>Asks the mascot to walk to a given x on its platform (for example toward the cursor).</summary>
     public void WalkTo(float x)
     {
+        if (AfterLanding(() => WalkTo(x)))
+            return;
         if (PlatformId is not long id || Surroundings.FindPlatform(id) is not Platform platform)
             return;
         if (State is MascotState.Dragged or MascotState.Falling or MascotState.Jump)
@@ -358,6 +361,8 @@ public sealed class MascotBrain
     /// <summary>Lies down where the mascot stands (if there is room).</summary>
     public void LieDown()
     {
+        if (AfterLanding(LieDown))
+            return;
         if (PlatformId is not long id || Surroundings.FindPlatform(id) is not Platform platform)
             return;
         if (State is not (MascotState.Idle or MascotState.Walk or MascotState.Sit or MascotState.Landing or MascotState.FloorSit or MascotState.Dance or MascotState.Pose))
@@ -387,6 +392,8 @@ public sealed class MascotBrain
     /// </summary>
     public bool StrikePose(bool grounded, float seconds, string? id = null)
     {
+        if (PlatformId is null)
+            return AfterLanding(() => StrikePose(grounded, seconds, id)) && State != MascotState.Dragged;
         if (PlatformId is null || State is MascotState.Dragged or MascotState.Falling or MascotState.Jump)
             return false;
         _plan = Plan.None;
@@ -402,6 +409,8 @@ public sealed class MascotBrain
     /// <summary>Dances on the spot (when standing on something).</summary>
     public void Dance()
     {
+        if (AfterLanding(Dance))
+            return;
         if (PlatformId is null || State is MascotState.Dragged or MascotState.Falling or MascotState.Jump)
             return;
         if (State is MascotState.Lie or MascotState.Sprawl or MascotState.FloorSit or MascotState.Sit
@@ -426,6 +435,8 @@ public sealed class MascotBrain
     /// <summary>Sits on the ground where the mascot stands.</summary>
     public void SitOnFloor()
     {
+        if (AfterLanding(SitOnFloor))
+            return;
         if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing or MascotState.Dance or MascotState.Pose))
             return;
         _plan = Plan.FloorSit;
@@ -513,6 +524,8 @@ public sealed class MascotBrain
     /// <summary>Sits down where the mascot stands (on the ground when on the floor).</summary>
     public void SitDown()
     {
+        if (AfterLanding(SitDown))
+            return;
         if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing or MascotState.Tumble or MascotState.Dance or MascotState.Pose))
             return;
         _plan = Plan.Sit;
@@ -533,6 +546,7 @@ public sealed class MascotBrain
 
     public void BeginDrag()
     {
+        _onLanded = null;
         VelocityX = 0f;
         VelocityY = 0f;
         PlatformId = null;
@@ -1086,6 +1100,35 @@ public sealed class MascotBrain
             ? Lerp(0.8f, 2f, (float)_random.NextDouble())
             : Lerp(_tuning.MinIdleSeconds, _tuning.MaxIdleSeconds, (float)_random.NextDouble());
         SetState(MascotState.Idle);
+        // Back on its feet: carry out what was asked while it was on a wall or in the air.
+        if (_onLanded is Action pending && PlatformId != null)
+        {
+            _onLanded = null;
+            pending();
+        }
+    }
+
+    /// <summary>
+    /// For a request that needs the ground under the feet (dancing, a pose, sitting…): on
+    /// a wall the mascot lets go and hops down first, in the air it waits until it has
+    /// landed; the request is then carried out. Returns true when the request was put off
+    /// (or cannot be carried out at all, being carried).
+    /// </summary>
+    private bool AfterLanding(Action request)
+    {
+        if (PlatformId != null)
+            return false;
+        switch (State)
+        {
+            case MascotState.Climb or MascotState.Cling:
+                _onLanded = request;
+                StartFalling(-WallSide * _tuning.WalkSpeed * 0.8f, 0f, controlled: true);
+                break;
+            case MascotState.Falling or MascotState.Jump:
+                _onLanded = request;
+                break;
+        }
+        return true;
     }
 
     private void EnterWalk(float target, bool clamp = true)
