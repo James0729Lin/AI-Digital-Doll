@@ -197,6 +197,9 @@ public partial class MascotRoot : Node3D
             UpdateTouch(dt);
 
         _brain.Update(dt);
+        // The brain picks the pose (asked for, or now and then on its own); the body holds it.
+        if (_brain.State == MascotState.Pose && _brain.PoseId is string poseId)
+            _animator.StrikePose(poseId);
         PlaceCharacter(dt);
 
         _animator.LookYaw = 0f;
@@ -290,8 +293,7 @@ public partial class MascotRoot : Node3D
             return;
         if (PoseCatalog.Find(action) is PoseInfo pose)
         {
-            if (_brain.StrikePose(pose.Base != PoseBase.Stand, pose.Seconds))
-                _animator.StrikePose(pose.Id);
+            _brain.StrikePose(pose.Base != PoseBase.Stand, pose.Seconds, pose.Id);
             return;
         }
         switch (action)
@@ -600,6 +602,7 @@ public partial class MascotRoot : Node3D
                     WalkSpeed = body.WalkSpeed * _pixelsPerMetre,
                     ClimbSpeed = body.ClimbSpeed * _pixelsPerMetre,
                     Height = _heightPixels,
+                    RandomPoses = body is HumanBody,
                 },
                 _random, x, BuildSurroundings()) { Staying = staying };
         }

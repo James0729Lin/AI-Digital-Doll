@@ -248,6 +248,173 @@ public sealed partial class ProceduralAnimator
             a.Head(-0.15f * w, 0f, 0f);
             a.Tiptoe(1f, w);
         }, Yaw: 0f, FaceWeight: 0.9f),
+
+        // ---- Kneeling --------------------------------------------------------------
+        ["kneel"] = new((a, w, t) =>
+        {
+            a.KneelBase(w);
+            a.Arm(R, 0.05f, 0.35f, 0.9f, 0.45f, 0f, w);
+            a.Arm(L, 0.05f, 0.35f, 0.9f, 0.45f, 0f, w);
+            a.Head(0.04f * w, 0f, 0.1f * w);
+        }, Yaw: 0.45f, FaceWeight: 0.6f),
+        ["kneel_hands_head"] = new((a, w, t) =>
+        {
+            a.KneelBase(w);
+            a.Arm(R, 2.0f, 0.4f, 2.3f, 0.1f, 0f, w);
+            a.Arm(L, 2.0f, 0.4f, 2.3f, 0.1f, 0f, w);
+            a.Head(-0.06f * w, 0f, 0.1f * w);
+        }, Yaw: 0.4f, Face: "relaxed", FaceWeight: 0.5f),
+        ["kneel_arch"] = new((a, w, t) =>
+        {
+            a.KneelBase(w);
+            a._rig.Rotate("Hips", a._rig.Left, -0.15f * w);
+            a._rig.Rotate("Spine", a._rig.Left, -0.25f * w);
+            a._rig.Rotate("Chest", a._rig.Left, -0.15f * w);
+            a.Arm(R, 0.1f, -0.5f, 0.2f, 0f, 0f, w);
+            a.Arm(L, 0.1f, -0.5f, 0.2f, 0f, 0f, w);
+            a.Head(-0.25f * w, 0f, 0f);
+        }, Yaw: 1.0f, Face: "relaxed", FaceWeight: 0.6f),
+        ["kneel_reach"] = new((a, w, t) =>
+        {
+            a.KneelBase(w);
+            a.Arm(R, 2.8f, 0.2f, 0.15f, 0.15f, 0f, w);
+            a.Arm(L, 2.8f, 0.2f, 0.15f, 0.15f, 0f, w);
+            a.Head(-0.2f * w, 0f, 0f);
+        }, Yaw: 0.4f, Face: "relaxed", FaceWeight: 0.6f),
+        ["kneel_hair"] = new((a, w, t) =>
+        {
+            a.KneelBase(w);
+            a.Arm(R, 2.0f, 0.4f, 2.3f, 0.1f, 0f, w);
+            a.HandOnHip(L, w);
+            a._rig.Rotate("Spine", a._rig.Forward, 0.1f * w);
+            a.Head(0f, 0f, 0.12f * w);
+        }, Yaw: 0.4f, FaceWeight: 0.6f),
+        ["one_knee"] = new((a, w, t) =>
+        {
+            a.OneKneeBase(R, w);
+            a.Arm(L, 0.05f, 0.7f, 0.7f, 0.2f, 0f, w);
+            a.Arm(R, 0.05f, 0.3f, 1.0f, 0.4f, 0f, w);
+            a.Lean(0.15f * w, w);
+        }, Yaw: 0.9f, FaceWeight: 0.6f),
+        ["one_knee_look_up"] = new((a, w, t) =>
+        {
+            a.OneKneeBase(R, w);
+            a.Arm(L, 0.05f, 0.7f, 0.7f, 0.2f, 0f, w);
+            a.Arm(R, 0.05f, 0.2f, 0.4f, 0f, 0f, w);
+            a.Head(-0.4f * w, 0.1f * w, 0f);
+        }, Yaw: 0.9f, Face: "surprised", FaceWeight: 0.3f),
+        ["kneel_side_hand"] = new((a, w, t) =>
+        {
+            a.KneelBase(w);
+            a._rig.Rotate("Hips", a._rig.Forward, 0.18f * w);
+            a._rig.Rotate("Spine", a._rig.Forward, 0.25f * w);
+            a.Arm(L, 0.55f, 0f, 0.1f, 0f, 0f, w);
+            a.Arm(R, 0.9f, 0.3f, 1.8f, 0.1f, 0f, w);
+            a.Head(0f, 0f, -0.15f * w);
+        }, Yaw: 0.2f, FaceWeight: 0.6f),
+
+        // ---- Sitting ---------------------------------------------------------------
+        ["seiza"] = new((a, w, t) =>
+        {
+            a.SeizaBase(0f, w);
+            a.Arm(R, 0f, 0.35f, 0.75f, 0.55f, 0f, w);
+            a.Arm(L, 0f, 0.35f, 0.75f, 0.55f, 0f, w);
+            a.Lean(-0.03f * w, w);
+        }, Yaw: 0.6f, Face: "relaxed", FaceWeight: 0.5f),
+        ["girl_sit"] = new((a, w, t) =>
+        {
+            a.SeizaBase(1f, w);
+            a.Arm(R, 0f, 0.35f, 0.75f, 0.55f, 0f, w);
+            a.Arm(L, 0f, 0.35f, 0.75f, 0.55f, 0f, w);
+            a.Head(0.04f * w, 0f, 0.12f * w);
+        }, Yaw: 0.25f, FaceWeight: 0.7f),
+        ["girl_sit_hands_front"] = new((a, w, t) =>
+        {
+            a.SeizaBase(1f, w);
+            a.Lean(0.3f * w, w);
+            a.Arm(R, 0.05f, 0.45f, 0.1f, 0.35f, 0f, w);
+            a.Arm(L, 0.05f, 0.45f, 0.1f, 0.35f, 0f, w);
+            a.Head(-0.2f * w, 0f, 0.1f * w);
+        }, Yaw: 0.25f, FaceWeight: 0.8f),
+        ["girl_sit_hands_head"] = new((a, w, t) =>
+        {
+            a.SeizaBase(1f, w);
+            a.Arm(R, 2.0f, 0.4f, 2.3f, 0.1f, 0f, w);
+            a.Arm(L, 2.0f, 0.4f, 2.3f, 0.1f, 0f, w);
+            a.Head(-0.05f * w, 0f, 0.12f * w);
+        }, Yaw: 0.25f, Face: "relaxed", FaceWeight: 0.5f),
+        ["girl_sit_lean_back"] = new((a, w, t) =>
+        {
+            a.SeizaBase(1f, w);
+            a.Lean(-0.3f * w, w);
+            a.Arm(R, 0.3f, -0.35f, 0.05f, -0.1f, 0f, w);
+            a.Arm(L, 0.3f, -0.35f, 0.05f, -0.1f, 0f, w);
+            a.Head(-0.1f * w, 0f, 0.1f * w);
+        }, Yaw: 0.35f, Face: "relaxed", FaceWeight: 0.6f),
+        ["side_sit"] = new((a, w, t) =>
+        {
+            a.SideSitBase(R, w);
+            a.Arm(L, 0.35f, 0.1f, 0.1f, 0f, 0f, w);
+            a.Arm(R, 0f, 0.4f, 0.9f, 0.5f, 0f, w);
+        }, Yaw: 0.2f, Face: "relaxed", FaceWeight: 0.5f),
+        ["side_sit_cheek"] = new((a, w, t) =>
+        {
+            a.SideSitBase(R, w);
+            a.Arm(L, 0.35f, 0.1f, 0.1f, 0f, 0f, w);
+            a.Arm(R, 0.1f, 0.95f, 2.45f, 0.5f, 0f, w);
+            a.Head(0.05f * w, 0f, -0.15f * w);
+        }, Yaw: 0.2f, FaceWeight: 0.7f),
+        ["knees_hug_tilt"] = new((a, w, t) =>
+        {
+            a.HugKneesBase(w);
+            a._rig.Rotate("LeftUpperLeg", a._rig.Forward, -0.25f * w);
+            a._rig.Rotate("RightUpperLeg", a._rig.Forward, -0.25f * w);
+            a.Head(0f, 0f, 0.18f * w);
+        }, Yaw: 0.5f, Face: "relaxed", FaceWeight: 0.6f),
+
+        // ---- Squatting -------------------------------------------------------------
+        ["squat"] = new((a, w, t) =>
+        {
+            a.SquatBase(0f, w);
+            a.Arm(R, 0.1f, 0.6f, 0.6f, 0.15f, 0f, w);
+            a.Arm(L, 0.1f, 0.6f, 0.6f, 0.15f, 0f, w);
+        }, Yaw: 0.45f, FaceWeight: 0.6f),
+        ["squat_hand_floor"] = new((a, w, t) =>
+        {
+            a.SquatBase(0f, w);
+            a.Arm(R, 0.15f, 0.55f, 0.1f, 0.2f, 0f, w);
+            a.Arm(L, 0.1f, 0.6f, 0.6f, 0.15f, 0f, w);
+            a.Head(-0.15f * w, 0f, 0f);
+        }, Yaw: 0.45f, FaceWeight: 0.6f),
+        ["squat_chin"] = new((a, w, t) =>
+        {
+            a.SquatBase(0f, w);
+            a.Arm(R, 0.1f, 0.95f, 2.45f, 0.5f, 0f, w);
+            a.Arm(L, 0.05f, 0.7f, 1.4f, 0.4f, 0f, w);
+            a.Head(-0.05f * w, 0f, -0.15f * w);
+        }, Yaw: 0.35f, FaceWeight: 0.7f),
+        ["squat_hair"] = new((a, w, t) =>
+        {
+            a.SquatBase(0f, w);
+            a.Arm(R, 1.25f, 0.55f, 2.4f, 0.2f, 0f, w);
+            a.Arm(L, 0.1f, 0.6f, 0.6f, 0.15f, 0f, w);
+            a.Head(0.05f * w, 0f, -0.12f * w);
+        }, Yaw: 0.35f, Face: "relaxed", FaceWeight: 0.5f),
+        ["squat_tiptoe"] = new((a, w, t) =>
+        {
+            a.SquatBase(1f, w);
+            a.Arm(R, 0.1f, 0.35f, 0.1f, 0.35f, 0f, w);
+            a.Arm(L, 0.1f, 0.35f, 0.1f, 0.35f, 0f, w);
+            a.Head(-0.2f * w, 0f, 0f);
+        }, Yaw: 0.3f, FaceWeight: 0.7f),
+        ["squat_look_back"] = new((a, w, t) =>
+        {
+            a.SquatBase(0f, w);
+            a._rig.Rotate("Spine", a._rig.Up, -0.3f * w);
+            a.Head(0f, -0.6f * w, 0.1f * w);
+            a.Arm(R, 0.1f, 0.6f, 0.6f, 0.15f, 0f, w);
+            a.Arm(L, 0.1f, 0.6f, 0.6f, 0.15f, 0f, w);
+        }, Yaw: 2.3f, FaceWeight: 0.6f),
     };
 
     private float _pose, _poseTime;
@@ -322,6 +489,110 @@ public sealed partial class ProceduralAnimator
         _rig.Rotate("RightLowerLeg", left, 1.1f * c);
         _rig.Rotate("LeftFoot", left, -0.5f * c);
         _rig.Rotate("RightFoot", left, -0.5f * c);
+    }
+
+    // Postures on the ground. The numbers come from a VRoid model's leg (thigh about
+    // 0.4 and shin 0.45 of the hip height): hips lowered so knees and feet meet the floor.
+
+    /// <summary>Kneeling upright: thighs straight down, shins flat on the floor behind.</summary>
+    private void KneelBase(float w)
+    {
+        var left = _rig.Left;
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * 0.5f * w));
+        _rig.Rotate("LeftLowerLeg", left, 1.57f * w);
+        _rig.Rotate("RightLowerLeg", left, 1.57f * w);
+        _rig.Rotate("LeftFoot", left, 0.9f * w);
+        _rig.Rotate("RightFoot", left, 0.9f * w);
+        _rig.Rotate("LeftUpperLeg", _rig.Forward, -0.05f * w);
+        _rig.Rotate("RightUpperLeg", _rig.Forward, 0.05f * w);
+    }
+
+    /// <summary>On one knee: the knee on this side down, the other foot planted in front.</summary>
+    private void OneKneeBase(int side, float w)
+    {
+        var left = _rig.Left;
+        string down = side > 0 ? "Left" : "Right", up = side > 0 ? "Right" : "Left";
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * 0.52f * w));
+        _rig.Rotate(down + "UpperLeg", left, 0.15f * w);
+        _rig.Rotate(down + "LowerLeg", left, 1.45f * w);
+        _rig.Rotate(down + "Foot", left, 0.8f * w);
+        _rig.Rotate(up + "UpperLeg", left, -1.5f * w);
+        _rig.Rotate(up + "LowerLeg", left, 1.5f * w);
+        _rig.Rotate(up + "Foot", left, -0.05f * w);
+    }
+
+    /// <summary>
+    /// Sitting on the heels (seiza); a splay of 1 turns it into a girl sit with the knees
+    /// apart and the feet out to the sides.
+    /// </summary>
+    private void SeizaBase(float splay, float w)
+    {
+        var left = _rig.Left;
+        var f = _rig.Forward;
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * (0.82f + 0.04f * splay) * w));
+        _rig.Rotate("LeftUpperLeg", left, -1.55f * w);
+        _rig.Rotate("RightUpperLeg", left, -1.55f * w);
+        _rig.Rotate("LeftUpperLeg", f, 0.18f * splay * w);
+        _rig.Rotate("RightUpperLeg", f, -0.18f * splay * w);
+        _rig.Rotate("LeftLowerLeg", left, 2.75f * w);
+        _rig.Rotate("RightLowerLeg", left, 2.75f * w);
+        _rig.Rotate("LeftLowerLeg", _rig.Up, 0.55f * splay * w);
+        _rig.Rotate("RightLowerLeg", _rig.Up, -0.55f * splay * w);
+        _rig.Rotate("LeftFoot", left, 1.0f * w);
+        _rig.Rotate("RightFoot", left, 1.0f * w);
+    }
+
+    /// <summary>Sitting with both legs folded to one side, leaning on the other hand.</summary>
+    private void SideSitBase(int side, float w)
+    {
+        var left = _rig.Left;
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * 0.86f * w));
+        _rig.Rotate("Hips", _rig.Up, side * 0.5f * w);
+        _rig.Rotate("Spine", _rig.Up, -side * 0.45f * w);
+        _rig.Rotate("Hips", _rig.Forward, -side * 0.12f * w);
+        _rig.Rotate("Spine", _rig.Forward, side * 0.2f * w);
+        foreach (string leg in new[] { "Left", "Right" })
+        {
+            _rig.Rotate(leg + "UpperLeg", left, -1.4f * w);
+            _rig.Rotate(leg + "LowerLeg", left, 2.3f * w);
+            _rig.Rotate(leg + "LowerLeg", _rig.Up, side * 0.5f * w);
+            _rig.Rotate(leg + "Foot", left, 0.8f * w);
+        }
+    }
+
+    /// <summary>Sitting on the ground with the knees drawn up and hugged.</summary>
+    private void HugKneesBase(float w)
+    {
+        var left = _rig.Left;
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * 0.9f * w));
+        _rig.Rotate("Hips", left, -0.15f * w);
+        _rig.Rotate("LeftUpperLeg", left, -2.35f * w);
+        _rig.Rotate("RightUpperLeg", left, -2.35f * w);
+        _rig.Rotate("LeftLowerLeg", left, 1.65f * w);
+        _rig.Rotate("RightLowerLeg", left, 1.65f * w);
+        _rig.Rotate("LeftFoot", left, 0.8f * w);
+        _rig.Rotate("RightFoot", left, 0.8f * w);
+        _rig.Rotate("Spine", left, 0.28f * w);
+        Arm(1, 0f, 1.15f, 1.0f, 0.4f, 0f, w);
+        Arm(-1, 0f, 1.15f, 1.0f, 0.4f, 0f, w);
+    }
+
+    /// <summary>A deep squat, feet flat (or up on the toes with a tiptoe of 1), knees apart.</summary>
+    private void SquatBase(float tiptoe, float w)
+    {
+        var left = _rig.Left;
+        var f = _rig.Forward;
+        _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * (0.62f - 0.06f * tiptoe) * w));
+        _rig.Rotate("LeftUpperLeg", left, -2.05f * w);
+        _rig.Rotate("RightUpperLeg", left, -2.05f * w);
+        _rig.Rotate("LeftUpperLeg", f, 0.25f * w);
+        _rig.Rotate("RightUpperLeg", f, -0.25f * w);
+        _rig.Rotate("LeftLowerLeg", left, 2.4f * w);
+        _rig.Rotate("RightLowerLeg", left, 2.4f * w);
+        _rig.Rotate("LeftFoot", left, (-0.35f + 0.8f * tiptoe) * w);
+        _rig.Rotate("RightFoot", left, (-0.35f + 0.8f * tiptoe) * w);
+        _rig.Rotate("Spine", left, 0.4f * w);
+        Head(-0.25f * w, 0f, 0f);
     }
 
     /// <summary>Up on the toes (0–1).</summary>

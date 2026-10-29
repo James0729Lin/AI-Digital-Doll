@@ -64,6 +64,34 @@ public static class PoseCatalog
         P("arms_behind", PoseBase.Stand, "雙手背在身後挺胸", "手背後", "雙手背後", "hands behind back"),
         P("leg_back", PoseBase.Stand, "單腳往後勾起", "勾腳", "抬腳", "kick up a heel"),
         P("tiptoe_v", PoseBase.Stand, "踮腳雙手舉成 V", "踮腳", "舉雙手", "tiptoe"),
+
+        // Kneeling.
+        P("kneel", PoseBase.Kneel, "跪立雙手放大腿", "跪著", "跪下", "kneel"),
+        P("kneel_hands_head", PoseBase.Kneel, "跪立雙手放頭後", "跪著手放頭後", "kneel hands behind head"),
+        P("kneel_arch", PoseBase.Kneel, "跪立上身往後仰", "跪著往後仰", "kneel and lean back"),
+        P("kneel_reach", PoseBase.Kneel, "跪立雙手往上伸", "跪著伸展", "kneel and reach up"),
+        P("kneel_hair", PoseBase.Kneel, "跪立一手撥髮一手叉腰", "跪著撥頭髮", "kneel hair"),
+        P("one_knee", PoseBase.Kneel, "單膝跪地手放膝上", "單膝跪", "單膝跪地", "one knee"),
+        P("one_knee_look_up", PoseBase.Kneel, "單膝跪地抬頭看", "單膝跪著看上面", "look up on one knee"),
+        P("kneel_side_hand", PoseBase.Kneel, "跪立往側邊傾手撐地", "跪著側傾", "kneel lean to the side"),
+
+        // Sitting.
+        P("seiza", PoseBase.Sit, "正座", "正座", "跪坐", "seiza"),
+        P("girl_sit", PoseBase.Sit, "鴨子坐雙手放大腿", "鴨子坐", "女生坐", "girl sit"),
+        P("girl_sit_hands_front", PoseBase.Sit, "鴨子坐雙手撐在前面", "鴨子坐手撐前面", "girl sit hands in front"),
+        P("girl_sit_hands_head", PoseBase.Sit, "鴨子坐雙手放頭後", "鴨子坐手放頭後", "girl sit hands behind head"),
+        P("girl_sit_lean_back", PoseBase.Sit, "鴨子坐雙手撐在後面", "鴨子坐往後撐", "girl sit lean back"),
+        P("side_sit", PoseBase.Sit, "側坐雙腳收在一邊", "側坐", "side sit"),
+        P("side_sit_cheek", PoseBase.Sit, "側坐托著臉頰", "側坐托腮", "side sit chin in hand"),
+        P("knees_hug_tilt", PoseBase.Sit, "抱膝坐膝蓋歪一邊", "抱膝", "抱膝坐", "hug knees"),
+
+        // Squatting.
+        P("squat", PoseBase.Squat, "蹲下雙手放膝上", "蹲下", "蹲著", "squat"),
+        P("squat_hand_floor", PoseBase.Squat, "蹲下單手撐地", "蹲著手撐地", "squat hand on floor"),
+        P("squat_chin", PoseBase.Squat, "蹲下托腮", "蹲著托腮", "squat chin in hand"),
+        P("squat_hair", PoseBase.Squat, "蹲下撥頭髮", "蹲著撥頭髮", "squat hair"),
+        P("squat_tiptoe", PoseBase.Squat, "踮腳蹲雙手撐地", "踮腳蹲", "tiptoe squat"),
+        P("squat_look_back", PoseBase.Squat, "蹲著回頭", "蹲著回頭", "squat look back"),
     };
 
     /// <summary>
