@@ -140,6 +140,10 @@ public sealed class HumanoidRig
         }
     }
 
+    /// <summary>A bone's posed position in skeleton space (the origin when it is missing).</summary>
+    public Vector3 BonePosition(string bone) =>
+        _bones.TryGetValue(bone, out int index) ? Skeleton.GetBoneGlobalPose(index).Origin : Vector3.Zero;
+
     public Vector3 BoneGlobalPosition(string bone) =>
         _bones.TryGetValue(bone, out int index)
             ? Skeleton.GlobalTransform * Skeleton.GetBoneGlobalPose(index).Origin

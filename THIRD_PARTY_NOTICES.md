@@ -6,7 +6,7 @@ This project bundles or depends on the following third-party works.
 | Component | Location | License | Source |
 |---|---|---|---|
 | Godot Engine 4.7.2 (.NET) | runtime | MIT | https://godotengine.org/license |
-| godot-vrm (V-Sekai) | `app/addons/vrm` | MIT, © 2020-2021 V-Sekai Contributors, © 2020 VRM Consortium | https://github.com/V-Sekai/godot-vrm |
+| godot-vrm (V-Sekai) | `app/addons/vrm` (modified: a floor for spring bones, marked `DigitalDoll:`) | MIT, © 2020-2021 V-Sekai Contributors, © 2020 VRM Consortium | https://github.com/V-Sekai/godot-vrm |
 | Godot-MToon-Shader | `app/addons/Godot-MToon-Shader` | MIT, © 2020-2022 V-Sekai Contributors, © 2018 Masataka SUMI | https://github.com/V-Sekai/godot-vrm |
 | Godette (VRM test character) | `app/assets/characters/godette` | CC BY 3.0 | see below |
 | MakeHuman base mesh and targets | `app/assets/body/body.ddbp.gz` (converted) | CC0 1.0 | see below |

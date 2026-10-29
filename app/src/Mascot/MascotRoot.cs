@@ -544,7 +544,10 @@ public partial class MascotRoot : Node3D
         }
 
         var expressions = ExpressionRig.Create(model);
-        var animator = new ProceduralAnimator(rig, expressions, _random);
+        var animator = new ProceduralAnimator(rig, expressions, _random)
+        {
+            Torso = TorsoShape.Measure(model, rig),
+        };
         // VRM models carry spring bone settings on their root (vrm_toplevel.gd).
         if (model.Get("springbone_add_force").VariantType == Variant.Type.Vector3)
             animator.Springs = model;

@@ -649,11 +649,11 @@ public sealed partial class ProceduralAnimator
         }, Yaw: 1.3f, FaceWeight: 0.6f),
         ["bridge"] = new((a, w, t) =>
         {
-            a.TableBase(0.35f, w);
-            a._rig.Rotate("Spine", a._rig.Left, -0.35f * w);
-            a._rig.Rotate("Chest", a._rig.Left, -0.3f * w);
-            a.Arm(R, 0.2f, 2.9f, 0.2f, 0f, 0f, w);
-            a.Arm(L, 0.2f, 2.9f, 0.2f, 0f, 0f, w);
+            a.TableBase(0.22f, w);
+            a._rig.Rotate("Spine", a._rig.Left, -0.5f * w);
+            a._rig.Rotate("Chest", a._rig.Left, -0.4f * w);
+            a.Arm(R, 0.2f, 3.15f, 0.05f, 0f, 0f, w);
+            a.Arm(L, 0.2f, 3.15f, 0.05f, 0f, 0f, w);
             a.Head(-0.4f * w, 0f, 0f);
         }, Yaw: 1.45f, FaceWeight: 0.6f),
         ["cat_stretch"] = new((a, w, t) =>
@@ -774,8 +774,9 @@ public sealed partial class ProceduralAnimator
         _rig.Rotate(down + "UpperLeg", left, 0.15f * w);
         _rig.Rotate(down + "LowerLeg", left, 1.45f * w);
         _rig.Rotate(down + "Foot", left, 0.8f * w);
-        _rig.Rotate(up + "UpperLeg", left, -1.5f * w);
-        _rig.Rotate(up + "LowerLeg", left, 1.5f * w);
+        // The front thigh a little above level so the shin stands upright on the floor.
+        _rig.Rotate(up + "UpperLeg", left, -1.7f * w);
+        _rig.Rotate(up + "LowerLeg", left, 1.7f * w);
         _rig.Rotate(up + "Foot", left, -0.05f * w);
     }
 
@@ -804,17 +805,19 @@ public sealed partial class ProceduralAnimator
     private void SideSitBase(int side, float w)
     {
         var left = _rig.Left;
+        // Folded like sitting on the heels, then both shins swung out to one side and the
+        // hips settled down beside them.
         _rig.OffsetHips(_rig.Up * (-_rig.HipHeight * 0.86f * w));
-        _rig.Rotate("Hips", _rig.Up, side * 0.5f * w);
-        _rig.Rotate("Spine", _rig.Up, -side * 0.45f * w);
-        _rig.Rotate("Hips", _rig.Forward, -side * 0.12f * w);
-        _rig.Rotate("Spine", _rig.Forward, side * 0.2f * w);
+        _rig.Rotate("Hips", _rig.Up, side * 0.4f * w);
+        _rig.Rotate("Spine", _rig.Up, -side * 0.35f * w);
+        _rig.Rotate("Hips", _rig.Forward, -side * 0.1f * w);
+        _rig.Rotate("Spine", _rig.Forward, side * 0.18f * w);
         foreach (string leg in new[] { "Left", "Right" })
         {
-            _rig.Rotate(leg + "UpperLeg", left, -1.4f * w);
-            _rig.Rotate(leg + "LowerLeg", left, 2.3f * w);
-            _rig.Rotate(leg + "LowerLeg", _rig.Up, side * 0.5f * w);
-            _rig.Rotate(leg + "Foot", left, 0.8f * w);
+            _rig.Rotate(leg + "UpperLeg", left, -1.55f * w);
+            _rig.Rotate(leg + "LowerLeg", left, 2.7f * w);
+            _rig.Rotate(leg + "LowerLeg", _rig.Up, side * 0.9f * w);
+            _rig.Rotate(leg + "Foot", left, 1.0f * w);
         }
     }
 
@@ -870,7 +873,7 @@ public sealed partial class ProceduralAnimator
     /// <summary>On the side (lying on <paramref name="side"/>'s side), facing the viewer.</summary>
     private void SideLieBase(int side, float w)
     {
-        _rig.OffsetHips(_rig.Up * (-(_rig.HipHeight - 0.15f * _rig.Height) * w));
+        _rig.OffsetHips(_rig.Up * (-(_rig.HipHeight - 0.065f * _rig.Height) * w));
         _rig.Rotate("Hips", _rig.Forward, -side * MathF.PI / 2f * w);
     }
 

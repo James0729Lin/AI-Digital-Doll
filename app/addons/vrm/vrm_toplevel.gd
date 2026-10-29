@@ -22,6 +22,9 @@ const collider_group_class = preload("./vrm_collider_group.gd")
 @export var springbone_gravity_multiplier: float = 1.0
 @export var springbone_gravity_rotation: Quaternion = Quaternion.IDENTITY
 @export var springbone_add_force: Vector3 = Vector3.ZERO
+# DigitalDoll: a floor (height in skeleton space) that spring bone tails stay above;
+# below -1e8 there is no floor.
+@export var springbone_floor_y: float = -1e9
 
 @export_category("Run in Editor")
 @export var update_in_editor: bool = false
