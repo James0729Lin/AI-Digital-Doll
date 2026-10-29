@@ -273,6 +273,36 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void StrikesPosesOnItsOwnWhenAllowed()
+    {
+        var tuning = new MascotTuning { Height = Character, RandomPoses = true };
+        var poses = new HashSet<string>();
+        foreach (int seed in new[] { 1, 2, 3 })
+        {
+            var brain = new MascotBrain(tuning, new Random(seed), 960f, Screen());
+            for (int i = 0; i < 60 * 300; i++)
+            {
+                brain.Update(1f / 60f);
+                if (brain.State == MascotState.Pose)
+                {
+                    Assert.NotNull(brain.PoseId);
+                    Assert.NotNull(PoseCatalog.Find(brain.PoseId!));
+                    poses.Add(brain.PoseId!);
+                }
+            }
+        }
+        Assert.True(poses.Count >= 3, "several different poses");
+
+        // Animals (no RandomPoses) never pose on their own.
+        var animal = Create();
+        for (int i = 0; i < 60 * 300; i++)
+        {
+            animal.Update(1f / 60f);
+            Assert.NotEqual(MascotState.Pose, animal.State);
+        }
+    }
+
+    [Fact]
     public void CannotPoseInTheAir()
     {
         var brain = Create();

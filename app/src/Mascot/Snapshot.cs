@@ -172,7 +172,7 @@ internal sealed class Snapshot
             case "strike":
                 // A pose from the catalog, held (see --strike).
                 if (_strike != null && PoseCatalog.Find(_strike) is PoseInfo pose)
-                    brain.StrikePose(pose.Base != PoseBase.Stand, float.MaxValue);
+                    brain.StrikePose(pose.Base != PoseBase.Stand, float.MaxValue, pose.Id);
                 break;
             case "land":
                 brain.BeginDrag();

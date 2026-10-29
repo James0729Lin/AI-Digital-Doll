@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using DigitalDoll.Core.Acting;
 
 namespace DigitalDoll.Core.Mascot;
 
@@ -76,6 +78,9 @@ public sealed class MascotTuning
     public float MaxLieSeconds { get; init; } = 35f;
     public float MinFloorSitSeconds { get; init; } = 8f;
     public float MaxFloorSitSeconds { get; init; } = 20f;
+    /// <summary>Strikes a pose from the catalog now and then on its own (the doll; animals have no hands for them).</summary>
+    public bool RandomPoses { get; init; }
+
     public float MinDanceSeconds { get; init; } = 4f;
     public float MaxDanceSeconds { get; init; } = 9f;
 
@@ -133,6 +138,7 @@ public sealed class MascotBrain
     private float _hold;
     private bool _controlledFall;
     private bool _poseGrounded;
+    private string? _lastRandomPose;
     private float _climbStroke, _slipTime, _hangTime;
     private (float X, bool Run)? _afterGetUp;
 
@@ -196,6 +202,9 @@ public sealed class MascotBrain
         : _slipTime > 0f ? ClimbGrip.Slipping
         : _hangTime > 0f ? ClimbGrip.Hanging
         : ClimbGrip.Steady;
+
+    /// <summary>The pose being held (an id from <c>PoseCatalog</c>) while the state is <see cref="MascotState.Pose"/>.</summary>
+    public string? PoseId { get; private set; }
 
     /// <summary>Seconds left during which the mascot stays where it is (see <see cref="Hold"/>).</summary>
     public float HoldTime => _hold;
@@ -376,13 +385,14 @@ public sealed class MascotBrain
     /// <paramref name="grounded"/> poses (kneeling, sitting, lying) get up afterwards.
     /// Returns false when it cannot pose now (in the air, climbing, being carried).
     /// </summary>
-    public bool StrikePose(bool grounded, float seconds)
+    public bool StrikePose(bool grounded, float seconds, string? id = null)
     {
         if (PlatformId is null || State is MascotState.Dragged or MascotState.Falling or MascotState.Jump)
             return false;
         _plan = Plan.None;
         _afterGetUp = null;
         VelocityX = 0f;
+        PoseId = id;
         _poseGrounded = grounded;
         _waitDuration = seconds;
         SetState(MascotState.Pose);
@@ -579,6 +589,8 @@ public sealed class MascotBrain
             }),
             (0.5f, StartDance),
         };
+        if (_tuning.RandomPoses)
+            options.Add((0.9f, () => StrikeRandomPose(here)));
         if (here.Width >= _tuning.Height * 1.3f)
             options.Add((Staying ? 0.6f : 0.45f, () => { _plan = Plan.Lie; EnterWalk(LieSpot(here, PickWalkTarget(here, nearby: true))); }));
         if (here.Width >= _tuning.Height * 0.8f)
@@ -1036,6 +1048,27 @@ public sealed class MascotBrain
             SetState(MascotState.Sprawl);
         else
             SetState(drop > _tuning.Height * 0.9f ? MascotState.Tumble : MascotState.Landing);
+    }
+
+    /// <summary>A pose picked at random (not the last one); ground poses need room and are rarer.</summary>
+    private void StrikeRandomPose(Platform here)
+    {
+        bool roomy = here.Width >= _tuning.Height * 1.3f;
+        var choices = PoseCatalog.All
+            .Where(p => p.Id != _lastRandomPose && (roomy || p.Base == PoseBase.Stand))
+            .ToList();
+        if (choices.Count == 0)
+        {
+            EnterIdle();
+            return;
+        }
+        // Ground poses are held longer, so pick them less often.
+        var standing = choices.Where(p => p.Base == PoseBase.Stand).ToList();
+        var pool = standing.Count > 0 && (choices.Count == standing.Count || _random.NextDouble() < 0.65) ? standing : choices;
+        var pose = pool[_random.Next(pool.Count)];
+        _lastRandomPose = pose.Id;
+        float seconds = pose.Seconds * Lerp(0.8f, 1.4f, (float)_random.NextDouble());
+        StrikePose(pose.Base != PoseBase.Stand, seconds, pose.Id);
     }
 
     private void StartDance()
