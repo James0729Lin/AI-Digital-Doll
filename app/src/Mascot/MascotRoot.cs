@@ -279,18 +279,40 @@ public partial class MascotRoot : Node3D
         return GetWindow().Position + new Vector2I((int)head.X, (int)Mathf.Min(top, head.Y));
     }
 
-    /// <summary>Performs an action asked for in the chat ("sit", "lie" or a performance action).</summary>
+    /// <summary>
+    /// Performs an action asked for in the chat: a whole-body action ("come", "dance",
+    /// "sit", "floor_sit", "lie", "get_up"), a pose from <see cref="PoseCatalog"/>, or a
+    /// performance action.
+    /// </summary>
     internal void PerformCommand(string action)
     {
         if (_brain == null || _animator == null)
             return;
+        if (PoseCatalog.Find(action) is PoseInfo pose)
+        {
+            if (_brain.StrikePose(pose.Base != PoseBase.Stand, pose.Seconds))
+                _animator.StrikePose(pose.Id);
+            return;
+        }
         switch (action)
         {
             case "sit":
                 _brain.SitDown();
                 break;
+            case "floor_sit":
+                _brain.SitOnFloor();
+                break;
             case "lie":
                 _brain.LieDown();
+                break;
+            case "dance":
+                _brain.Dance();
+                break;
+            case "get_up":
+                _brain.GetUp();
+                break;
+            case "come":
+                _brain.WalkTo(CursorInWindow().X);
                 break;
             default:
                 if (_director.Pick(action, 0.8f) is GestureCue cue)

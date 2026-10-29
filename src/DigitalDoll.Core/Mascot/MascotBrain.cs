@@ -32,6 +32,9 @@ public enum MascotState
 
     /// <summary>Dancing on the spot for a little while.</summary>
     Dance,
+
+    /// <summary>Holding a named pose on the spot (see <c>PoseCatalog</c>).</summary>
+    Pose,
 }
 
 /// <summary>How a climbing mascot is holding on to its wall.</summary>
@@ -129,6 +132,7 @@ public sealed class MascotBrain
     private float _jumpStartX, _jumpStartY;
     private float _hold;
     private bool _controlledFall;
+    private bool _poseGrounded;
     private float _climbStroke, _slipTime, _hangTime;
     private (float X, bool Run)? _afterGetUp;
 
@@ -281,6 +285,16 @@ public sealed class MascotBrain
                 if (_stateTime >= _waitDuration)
                     EnterIdle(shortWait: true);
                 break;
+            case MascotState.Pose:
+                // Talking keeps the pose; one on the ground gets up afterwards.
+                if (_stateTime >= _waitDuration && _hold <= 0f)
+                {
+                    if (_poseGrounded)
+                        SetState(MascotState.GetUp);
+                    else
+                        EnterIdle(shortWait: true);
+                }
+                break;
             case MascotState.Sprawl:
                 if (_stateTime >= _tuning.SprawlSeconds)
                     SetState(MascotState.GetUp);
@@ -337,7 +351,7 @@ public sealed class MascotBrain
     {
         if (PlatformId is not long id || Surroundings.FindPlatform(id) is not Platform platform)
             return;
-        if (State is not (MascotState.Idle or MascotState.Walk or MascotState.Sit or MascotState.Landing or MascotState.FloorSit or MascotState.Dance))
+        if (State is not (MascotState.Idle or MascotState.Walk or MascotState.Sit or MascotState.Landing or MascotState.FloorSit or MascotState.Dance or MascotState.Pose))
             return;
         _plan = Plan.Lie;
         EnterWalk(LieSpot(platform, X));
@@ -350,11 +364,62 @@ public sealed class MascotBrain
     public void Preview(MascotState state)
     {
         if (PlatformId is null || state is not (MascotState.Sit or MascotState.Lie or MascotState.Sprawl or MascotState.GetUp
-                or MascotState.Tumble or MascotState.FloorSit or MascotState.Dance))
+                or MascotState.Tumble or MascotState.FloorSit or MascotState.Dance or MascotState.Pose))
             return;
         _plan = Plan.None;
         _waitDuration = float.MaxValue;
         SetState(state);
+    }
+
+    /// <summary>
+    /// Holds a pose on the spot for <paramref name="seconds"/> (longer while it talks);
+    /// <paramref name="grounded"/> poses (kneeling, sitting, lying) get up afterwards.
+    /// Returns false when it cannot pose now (in the air, climbing, being carried).
+    /// </summary>
+    public bool StrikePose(bool grounded, float seconds)
+    {
+        if (PlatformId is null || State is MascotState.Dragged or MascotState.Falling or MascotState.Jump)
+            return false;
+        _plan = Plan.None;
+        _afterGetUp = null;
+        VelocityX = 0f;
+        _poseGrounded = grounded;
+        _waitDuration = seconds;
+        SetState(MascotState.Pose);
+        return true;
+    }
+
+    /// <summary>Dances on the spot (when standing on something).</summary>
+    public void Dance()
+    {
+        if (PlatformId is null || State is MascotState.Dragged or MascotState.Falling or MascotState.Jump)
+            return;
+        if (State is MascotState.Lie or MascotState.Sprawl or MascotState.FloorSit or MascotState.Sit
+            || (State == MascotState.Pose && _poseGrounded))
+        {
+            SetState(MascotState.GetUp);
+            return;
+        }
+        _plan = Plan.None;
+        StartDance();
+    }
+
+    /// <summary>Gets up from lying, sitting or a pose on the ground; does nothing when already up.</summary>
+    public void GetUp()
+    {
+        if (State is MascotState.Lie or MascotState.Sprawl or MascotState.FloorSit || (State == MascotState.Pose && _poseGrounded))
+            SetState(MascotState.GetUp);
+        else if (State is MascotState.Sit or MascotState.Pose)
+            EnterIdle(shortWait: true);
+    }
+
+    /// <summary>Sits on the ground where the mascot stands.</summary>
+    public void SitOnFloor()
+    {
+        if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing or MascotState.Dance or MascotState.Pose))
+            return;
+        _plan = Plan.FloorSit;
+        Arrive();
     }
 
     /// <summary>Wakes a lying mascot (it gets up); does nothing otherwise.</summary>
@@ -438,7 +503,7 @@ public sealed class MascotBrain
     /// <summary>Sits down where the mascot stands (on the ground when on the floor).</summary>
     public void SitDown()
     {
-        if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing or MascotState.Tumble or MascotState.Dance))
+        if (PlatformId is null || State is not (MascotState.Idle or MascotState.Walk or MascotState.Landing or MascotState.Tumble or MascotState.Dance or MascotState.Pose))
             return;
         _plan = Plan.Sit;
         Arrive();
@@ -1040,10 +1105,11 @@ public sealed class MascotBrain
     /// <summary>When lying, sprawled or sitting on the ground, gets up first and walks (or runs) to x afterwards.</summary>
     private bool GettingUpFirst(float x, bool run)
     {
-        if (State is not (MascotState.Lie or MascotState.Sprawl or MascotState.GetUp or MascotState.FloorSit))
+        bool groundPose = State == MascotState.Pose && _poseGrounded;
+        if (State is not (MascotState.Lie or MascotState.Sprawl or MascotState.GetUp or MascotState.FloorSit) && !groundPose)
             return false;
         _afterGetUp = (x, run);
-        if (State is MascotState.Lie or MascotState.FloorSit)
+        if (State is MascotState.Lie or MascotState.FloorSit || groundPose)
             SetState(MascotState.GetUp);
         return true;
     }

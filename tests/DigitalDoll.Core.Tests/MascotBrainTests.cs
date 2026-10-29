@@ -251,6 +251,49 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void HoldsAPoseThenCarriesOn()
+    {
+        var brain = Create();
+        Assert.True(brain.StrikePose(grounded: false, seconds: 3f));
+        Assert.Equal(MascotState.Pose, brain.State);
+        float x = brain.X;
+        Run(brain, 2.9f);
+        Assert.Equal(MascotState.Pose, brain.State);
+        Assert.Equal(x, brain.X);
+        Run(brain, 0.2f);
+        Assert.Equal(MascotState.Idle, brain.State);
+
+        // A pose on the ground gets up afterwards, or first when asked to walk.
+        brain.StrikePose(grounded: true, seconds: 3f);
+        Run(brain, 3.1f);
+        Assert.Equal(MascotState.GetUp, brain.State);
+        brain.StrikePose(grounded: true, seconds: 30f);
+        brain.WalkTo(1500f);
+        Assert.Equal(MascotState.GetUp, brain.State);
+    }
+
+    [Fact]
+    public void CannotPoseInTheAir()
+    {
+        var brain = Create();
+        brain.BeginDrag();
+        Assert.False(brain.StrikePose(grounded: false, seconds: 3f));
+        Assert.Equal(MascotState.Dragged, brain.State);
+    }
+
+    [Fact]
+    public void DancesAndSitsOnTheFloorWhenAsked()
+    {
+        var brain = Create();
+        brain.Dance();
+        Assert.Equal(MascotState.Dance, brain.State);
+        brain.SitOnFloor();
+        Assert.Equal(MascotState.FloorSit, brain.State);
+        brain.GetUp();
+        Assert.Equal(MascotState.GetUp, brain.State);
+    }
+
+    [Fact]
     public void SitsOnTheGroundWhenAskedOnTheFloor()
     {
         var brain = Create();

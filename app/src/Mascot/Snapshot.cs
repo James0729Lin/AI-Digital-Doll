@@ -22,6 +22,7 @@ internal sealed class Snapshot
     private bool _captured;
 
     private string? _gesture;
+    private string? _strike;
     private string? _emotion;
     private bool _talking, _petting;
 
@@ -78,6 +79,9 @@ internal sealed class Snapshot
                     break;
                 case "--animal":
                     snapshot.Animal = Enum.Parse<Species>(value, ignoreCase: true);
+                    break;
+                case "--strike":
+                    snapshot._strike = value;
                     break;
                 case "--style":
                     snapshot.AnimalStyle = Enum.Parse<AnimalStyle>(value, ignoreCase: true);
@@ -165,6 +169,11 @@ internal sealed class Snapshot
                     _ => MascotState.GetUp,
                 });
                 break;
+            case "strike":
+                // A pose from the catalog, held (see --strike).
+                if (_strike != null && PoseCatalog.Find(_strike) is PoseInfo pose)
+                    brain.StrikePose(pose.Base != PoseBase.Stand, float.MaxValue);
+                break;
             case "land":
                 brain.BeginDrag();
                 brain.DragTo(centre, window.Y - 2f);
@@ -177,6 +186,8 @@ internal sealed class Snapshot
     public void Act(IPerformer animator)
     {
         animator.Fidgets = false;
+        if (_strike != null)
+            animator.StrikePose(_strike);
         animator.Talking = _talking;
         animator.Petted = _petting;
         if (_emotion != null && PerformanceDirector.EmotionOf(_emotion) is Emotion emotion)

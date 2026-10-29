@@ -264,7 +264,11 @@ public sealed class PerformanceDirector
     public PerformanceDirector(Random random) => _random = random;
 
     public static bool IsEmotion(string word) => Emotions.ContainsKey(Normalize(word));
-    public static bool IsAction(string word) => Actions.ContainsKey(Normalize(word));
+    public static bool IsAction(string word)
+    {
+        string name = Normalize(word);
+        return Actions.ContainsKey(name) || PoseCatalog.Has(name) || PoseCatalog.IsBodyAction(name);
+    }
 
     public static Emotion? EmotionOf(string word)
     {
@@ -278,7 +282,7 @@ public sealed class PerformanceDirector
     public static string Normalize(string word)
     {
         word = word.Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
-        if (Actions.ContainsKey(word) || Emotions.ContainsKey(word))
+        if (Actions.ContainsKey(word) || Emotions.ContainsKey(word) || PoseCatalog.Has(word) || PoseCatalog.IsBodyAction(word))
             return word;
         foreach (var suffix in new[] { "_hand", "_hands", "_head", "_up", "s", "ing", "ed" })
         {

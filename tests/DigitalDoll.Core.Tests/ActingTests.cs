@@ -124,6 +124,42 @@ public class ActingTests
     }
 
     [Fact]
+    public void PosesAndBodyActionsAreAskedForInWords()
+    {
+        Assert.Equal(new[] { "heart_hands" }, LocalDirector.Command("比個愛心給我"));
+        Assert.Equal(new[] { "big_heart" }, LocalDirector.Command("比一個大愛心"));
+        Assert.Equal(new[] { "salute" }, LocalDirector.Command("敬禮！"));
+        Assert.Equal(new[] { "come" }, LocalDirector.Command("過來這裡"));
+        Assert.Equal(new[] { "floor_sit" }, LocalDirector.Command("坐在地上休息"));
+        Assert.Equal(new[] { "get_up" }, LocalDirector.Command("快起床"));
+        Assert.Equal(new[] { "dance" }, LocalDirector.Command("可以跳支舞給我看嗎"));
+    }
+
+    [Fact]
+    public void TheAiCanAskForPosesAndBodyActions()
+    {
+        var cue = CueParser.Parse("happy:0.8 heart_hands")!;
+        Assert.Equal(Emotion.Happy, cue.Emotion);
+        Assert.Equal(new[] { "heart_hands" }, cue.Actions);
+        Assert.Equal(new[] { "dance" }, CueParser.Parse("happy dance")!.Actions);
+        Assert.Equal(new[] { "floor_sit" }, CueParser.Parse("relaxed floor_sit")!.Actions);
+        Assert.Contains("heart_hands", Conversation.SystemPrompt(new AiSettings()));
+        Assert.Contains("floor_sit", Conversation.SystemPrompt(new AiSettings()));
+    }
+
+    [Fact]
+    public void PoseIdsAreUniqueAndAskable()
+    {
+        Assert.Equal(PoseCatalog.All.Count, PoseCatalog.All.Select(p => p.Id).Distinct().Count());
+        foreach (var pose in PoseCatalog.All)
+        {
+            Assert.NotEmpty(pose.Words);
+            Assert.True(PerformanceDirector.IsAction(pose.Id), pose.Id);
+            Assert.Equal(pose.Id, PerformanceDirector.Normalize(pose.Id));
+        }
+    }
+
+    [Fact]
     public void ConversationKeepsRecentTurnsStartingWithTheUser()
     {
         var chat = new Conversation(maxTurns: 4);
