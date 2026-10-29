@@ -250,7 +250,10 @@ public partial class ChatController : Node
             animator.Feel(emotion, cue.Intensity, 6f);
         foreach (var action in cue.Actions)
         {
-            if (_director.Pick(action, cue.Intensity) is GestureCue gesture)
+            // Poses and whole-body actions move the character; the rest are gestures.
+            if (PoseCatalog.Has(action) || PoseCatalog.IsBodyAction(action))
+                _root.PerformCommand(action);
+            else if (_director.Pick(action, cue.Intensity) is GestureCue gesture)
                 animator.Play(gesture);
         }
     }

@@ -123,6 +123,9 @@ public sealed class AnimalAnimator : IPerformer
         }
     }
 
+    /// <summary>Animals have no hands for the doll's poses: a happy little hop instead.</summary>
+    public void StrikePose(string id) => Play(new GestureCue(Gesture.Hop, 1.4f, 0.8f, false), now: true);
+
     public void Feel(Emotion emotion, float intensity, float seconds = 4f)
     {
         if (emotion == Emotion.Neutral)
@@ -144,7 +147,7 @@ public sealed class AnimalAnimator : IPerformer
         if (state == MascotState.FloorSit)
             state = MascotState.Sit;
         _dancing = state == MascotState.Dance;
-        if (_dancing)
+        if (_dancing || state == MascotState.Pose)
             state = MascotState.Idle;
         _time += dt;
         _stateTime = state == _state ? _stateTime + dt : 0f;

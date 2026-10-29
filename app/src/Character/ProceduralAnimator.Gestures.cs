@@ -85,7 +85,7 @@ public sealed partial class ProceduralAnimator
     private float Allowance(GestureReach reach)
     {
         float head = 1f - MathF.Max(MathF.Max(_drag, _fall), MathF.Max(MathF.Max(_jump, _tumble), MathF.Max(_sprawl, _getUp)));
-        float upper = head * (1f - MathF.Max(MathF.Max(_climb, _lie), _dance));
+        float upper = head * (1f - MathF.Max(MathF.Max(_climb, _lie), MathF.Max(_dance, _pose)));
         return reach switch
         {
             GestureReach.Head => head * (1f - 0.5f * _lie),

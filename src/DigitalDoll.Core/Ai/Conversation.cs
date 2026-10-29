@@ -65,6 +65,9 @@ public sealed class Conversation
             ⟨worried:0.4 tilt_head⟩ 會緊張很正常啦。⟨happy:0.7 encourage⟩ 你一定沒問題！
             - 情緒只能是：{string.Join(", ", PerformanceDirector.PromptEmotions)}；強度 0–1。
             - 動作 0–2 個，只能是：{string.Join(", ", PerformanceDirector.PromptActions)}（count 可加數字，如 count:2）。
+            - 使用者請你做全身動作或擺姿勢時（例如「過來」「跳支舞」「坐下休息」「比個愛心」），在標記裡放對應的動作，一則回答最多一個：
+              全身動作：{string.Join(", ", PoseCatalog.BodyActions)}（come 走過來、floor_sit 坐地上、get_up 起來）
+              姿勢：{string.Join(", ", PoseCatalog.All.Select(p => $"{p.Id}（{p.Description}）"))}
             - 依內容挑最貼切的動作，同一則回答不要重複同一個動作。
             - 標記只用來表演，使用者看不到；不要解釋或提到標記。
             """;

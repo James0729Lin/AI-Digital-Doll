@@ -70,13 +70,14 @@ public static partial class LocalDirector
     }
 
     /// <summary>
-    /// Actions the user asked for directly in a short message ("跳一下", "wave"). Besides
-    /// the performance actions, "sit" and "lie" ask the character to sit or lie down.
+    /// Actions the user asked for directly in a short message ("跳一下", "比個愛心").
+    /// Besides the performance actions these can be whole-body actions
+    /// (<see cref="PoseCatalog.BodyActions"/>) and pose ids (<see cref="PoseCatalog"/>).
     /// </summary>
     public static IReadOnlyList<string> Command(string userText)
     {
         var s = userText.Trim().ToLowerInvariant();
-        if (s.Length == 0 || s.Length > 24)
+        if (s.Length == 0 || s.Length > 40)
             return Array.Empty<string>();
         var result = new List<string>();
         void Check(string action, params string[] words)
@@ -84,7 +85,13 @@ public static partial class LocalDirector
             if (words.Any(w => s.Contains(w, StringComparison.Ordinal)) && !result.Contains(action))
                 result.Add(action);
         }
-        Check("dance", "跳舞", "dance");
+        // A named pose takes precedence over the gestures that share its words.
+        if (PoseCatalog.Match(s) is PoseInfo pose)
+            return new[] { pose.Id };
+        Check("come", "過來", "來這裡", "來這邊", "come here", "come over");
+        Check("get_up", "起來", "起床", "站起來", "get up", "stand up");
+        Check("floor_sit", "坐地上", "坐在地上", "sit on the floor");
+        Check("dance", "跳舞", "跳支舞", "dance");
         if (!result.Contains("dance"))
             Check("jump", "跳一下", "跳跳", "跳起來", "jump");
         Check("wave", "揮手", "揮揮手", "wave");
@@ -94,7 +101,8 @@ public static partial class LocalDirector
         Check("clap", "拍手", "鼓掌", "clap");
         Check("stretch", "伸懶腰", "stretch");
         Check("celebrate", "歡呼", "cheer");
-        Check("sit", "坐下", "坐著", "sit down");
+        if (!result.Contains("floor_sit"))
+            Check("sit", "坐下", "坐著", "休息一下", "sit down");
         Check("lie", "躺下", "睡覺", "去睡", "lie down", "go to sleep");
         return result;
     }

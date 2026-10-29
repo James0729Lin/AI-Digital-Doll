@@ -101,6 +101,10 @@ public sealed partial class ProceduralAnimator : IPerformer
         _time += dt;
         Ease(ref _floorSit, state == MascotState.FloorSit ? 1f : 0f, dt, 5f);
         Ease(ref _dance, state == MascotState.Dance ? 1f : 0f, dt, 6f);
+        Ease(ref _pose, state == MascotState.Pose ? 1f : 0f, dt, 6f);
+        _poseTime = state == MascotState.Pose ? _poseTime + dt : 0f;
+        if (state != MascotState.Pose && _pose < 0.01f)
+            _poseId = null;
         Ease(ref _brace, bracing ? 1f : 0f, dt, 12f);
         _danceTime = state == MascotState.Dance ? _danceTime + dt : 0f;
         _fallTime = state == MascotState.Falling ? _fallTime + dt : 0f;
@@ -168,6 +172,7 @@ public sealed partial class ProceduralAnimator : IPerformer
         PoseGetUp();
         PoseFloorSit();
         PoseDance();
+        PosePose();
         PosePetting();
         PoseTalking();
         PoseGestures();
@@ -543,6 +548,7 @@ public sealed partial class ProceduralAnimator : IPerformer
             _expressions.Set(_expressions.Has("sad") ? "sad" : "angry", 0.7f * _sprawl);
         if (_gesture?.Cue.Gesture == Gesture.Yawn)
             _expressions.Set("oh", 0.9f * MathF.Sin(MathF.PI * _gesture.Phase));
+        PoseFace();
         UpdateMouth(dt);
         if (_climbUp > 0.01f)
             _expressions.Set("angry", 0.3f * _climbUp * (1f - mood));
@@ -800,7 +806,7 @@ public sealed partial class ProceduralAnimator : IPerformer
     /// <summary>Speaking rhythm: small nods and hand movement even without gestures.</summary>
     private void PoseTalking()
     {
-        float w = _talk * Allowance(GestureReach.Upper) * (_gesture == null ? 1f : 0.3f);
+        float w = _talk * Allowance(GestureReach.Upper) * (_gesture == null ? 1f : 0.3f) * (1f - _pose);
         if (w <= 0.001f)
             return;
         float beat = MathF.Sin(_time * 4.3f) * 0.5f + MathF.Sin(_time * 2.1f + 1f) * 0.5f;

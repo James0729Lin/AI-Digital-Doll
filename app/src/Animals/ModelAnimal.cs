@@ -304,6 +304,9 @@ public sealed class ModelAnimalPerformer : IPerformer
 
     public void StopGestures() => _gesture = null;
 
+    /// <summary>The models have no hands for the doll's poses: a happy wriggle instead.</summary>
+    public void StrikePose(string id) => Play(new GestureCue(Gesture.Nod, 1.6f, 0.8f, false), now: true);
+
     public void Feel(Emotion emotion, float intensity, float seconds = 4f)
     {
         _emotion = emotion;

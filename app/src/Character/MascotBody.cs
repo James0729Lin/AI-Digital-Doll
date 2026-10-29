@@ -22,6 +22,12 @@ public interface IPerformer
     void Update(float dt, MascotState state, float speedMetres, float dragVelocityMetres, float climbSpeedMetres = 0f, bool running = false,
         bool bracing = false, ClimbGrip grip = ClimbGrip.Steady);
     void Play(GestureCue cue, bool now = false);
+
+    /// <summary>
+    /// The pose to hold while the behaviour is <see cref="MascotState.Pose"/> (an id from
+    /// <see cref="PoseCatalog"/>); characters without the pose do something close instead.
+    /// </summary>
+    void StrikePose(string id);
     void StopGestures();
     void Feel(Emotion emotion, float intensity, float seconds = 4f);
 }
@@ -111,6 +117,7 @@ public sealed class HumanBody : IMascotBody
         // Flat on its face: seen from the side.
         MascotState.Sprawl => facing * Mathf.Pi / 2f,
         MascotState.GetUp => facing * 0.5f,
+        MascotState.Pose => _animator.PoseYaw(facing),
         // Facing the user while talking or being touched.
         MascotState.Idle when faceUser => 0f,
         _ => facing * 0.3f,
