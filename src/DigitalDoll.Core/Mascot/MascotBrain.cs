@@ -343,6 +343,10 @@ public sealed class MascotBrain
                 UpdateClimb(dt);
                 break;
             case MascotState.Cling:
+                // Holding a window's side with the hands already at its top (put down there,
+                // or a side shorter than the reach): a moment's hang, then up onto it.
+                if (!Staying && _hold <= 0f && _stateTime > 0.6f && TryHeaveUp())
+                    break;
                 if (_stateTime >= _waitDuration && _hold <= 0f)
                     DecideOnWall();
                 break;
@@ -920,6 +924,17 @@ public sealed class MascotBrain
         SetState(MascotState.Cling);
     }
 
+    /// <summary>Heaves up onto the window top when the hands are on (or above) its edge.</summary>
+    private bool TryHeaveUp()
+    {
+        if (_wallId is not long id || Surroundings.FindWall(id) is not Wall wall || wall.TopPlatform is not long top
+            || Surroundings.FindPlatform(top) is not Platform platform || Y > Highest(wall) + 2f)
+            return false;
+        float onto = Math.Clamp(wall.X + wall.Side * _tuning.Height * 0.15f, platform.X0, platform.X1);
+        StartJump(platform, onto);
+        return true;
+    }
+
     private void UpdateClimb(float dt)
     {
         var holding = _wallId is long holdId ? Surroundings.FindWall(holdId) : null;
@@ -986,12 +1001,8 @@ public sealed class MascotBrain
             if (_wallId is long id && Surroundings.FindWall(id) is Wall wall)
             {
                 // Hands on the top edge of a window: heave up onto it.
-                if (!Staying && MathF.Abs(Y - Highest(wall)) < 1f && wall.TopPlatform is long top && Surroundings.FindPlatform(top) is Platform platform)
-                {
-                    float onto = Math.Clamp(wall.X + wall.Side * _tuning.Height * 0.15f, platform.X0, platform.X1);
-                    StartJump(platform, onto);
+                if (!Staying && TryHeaveUp())
                     return;
-                }
                 StartCling(wall, Y);
             }
             return;

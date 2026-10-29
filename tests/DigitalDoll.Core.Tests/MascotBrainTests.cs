@@ -408,6 +408,26 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void PutDownAgainstAShortWindowSideItHeavesUpOntoIt()
+    {
+        // The window's visible side (top 800, bottom 960) is shorter than the reach.
+        var surroundings = WithWindow(400, 800, 1200, 960);
+        var wall = surroundings.Walls.First(w => w.TopPlatform != null && w.Side > 0 && w.X < 500f);
+        var brain = Create(startX: 200f, surroundings: surroundings);
+        brain.BeginDrag();
+        brain.DragTo(wall.X - wall.Side * Tuning.WallOffset, 900f);
+        brain.EndDrag(0f, 0f);
+        Assert.Equal(MascotState.Cling, brain.State);
+        bool onTop = false;
+        for (int i = 0; i < 60 * 3 && !onTop; i++)
+        {
+            brain.Update(1f / 60f);
+            onTop = brain.PlatformId == wall.TopPlatform;
+        }
+        Assert.True(onTop, "with the hands already over the top it should heave up onto it");
+    }
+
+    [Fact]
     public void CannotPoseInTheAir()
     {
         var brain = Create();
