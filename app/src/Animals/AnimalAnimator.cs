@@ -79,12 +79,16 @@ public sealed class AnimalAnimator : IPerformer
     private float _syllable, _syllableLength = 0.12f, _syllableOpen;
     private float _fidgetTimer = 6f;
     private Gesture? _lastFidget;
+    private readonly ActivityProps _props;
+    private string? _activity, _poseId;
+    private float _act;
 
     public AnimalAnimator(AnimalRig rig, Random random)
     {
         _rig = rig;
         _random = random;
         _fidgetDirector = new PerformanceDirector(random);
+        _props = new ActivityProps(rig.Model, rig.Species, rig.Height, rig.Height * (rig.Biped ? 0.6f : 1.25f));
     }
 
     public float LookYaw { get; set; }
@@ -123,8 +127,20 @@ public sealed class AnimalAnimator : IPerformer
         }
     }
 
-    /// <summary>Animals have no hands for the doll's poses: a happy little hop instead.</summary>
-    public void StrikePose(string id) => Play(new GestureCue(Gesture.Hop, 1.4f, 0.8f, false), now: true);
+    /// <summary>
+    /// An activity (see <see cref="ActivityCatalog"/>) is done for as long as the pose is
+    /// held; animals have no hands for the doll's poses, so those get a happy little hop.
+    /// </summary>
+    public void StrikePose(string id)
+    {
+        if (id == _poseId)
+            return;
+        _poseId = id;
+        if (ActivityCatalog.Has(id))
+            _activity = id;
+        else
+            Play(new GestureCue(Gesture.Hop, 1.4f, 0.8f, false), now: true);
+    }
 
     public void Feel(Emotion emotion, float intensity, float seconds = 4f)
     {
@@ -147,6 +163,13 @@ public sealed class AnimalAnimator : IPerformer
         if (state == MascotState.FloorSit)
             state = MascotState.Sit;
         _dancing = state == MascotState.Dance;
+        if (state != MascotState.Pose)
+            _activity = _poseId = null;
+        _props.Update(dt, _activity, state);
+        Ease(ref _act, _activity != null ? 1f : 0f, dt, 5f);
+        // Washing its face sitting up; the rest of an activity is posed over standing.
+        if (_activity == "wash_face")
+            state = MascotState.Sit;
         if (_dancing || state == MascotState.Pose)
             state = MascotState.Idle;
         _time += dt;
@@ -207,6 +230,7 @@ public sealed class AnimalAnimator : IPerformer
         PoseLanding();
         PoseJump();
         PoseClimb();
+        PoseActivity();
         PosePetting();
         PoseTalking();
         if (_fading != null)
@@ -645,6 +669,146 @@ public sealed class AnimalAnimator : IPerformer
         }
     }
 
+    // ---- Activities -------------------------------------------------------------------
+
+    private void PoseActivity()
+    {
+        float w = _act;
+        if (w <= 0.001f || _activity == null)
+            return;
+        float t = _props.Time;
+        switch (_activity)
+        {
+            case "eat":
+                if (Quadruped)
+                    PoseEat(t, w);
+                else
+                    PosePeck(t, w);
+                break;
+            case "yarn":
+            case "ball":
+                PosePlay(t, w);
+                break;
+            case "wash_face":
+            {
+                // Licks a paw, then wipes it over the face, again and again.
+                float cycle = (t * 0.55f) % 1f;
+                float lick = cycle < 0.5f ? 1f : 0f;
+                Paw(1, 0.75f + 0.15f * (1f - lick), 0f, w);
+                _p.HeadPitch += (0.25f + 0.2f * lick) * w;
+                _p.HeadRoll += (1f - lick) * 0.35f * MathF.Sin(t * 7f) * w;
+                _p.HeadYaw += (1f - lick) * 0.25f * w;
+                _p.Mouth += lick * 0.35f * MathF.Max(0f, MathF.Sin(t * 12f)) * w;
+                _p.Tongue += lick * w;
+                _p.Squint += 0.9f * w;
+                break;
+            }
+            case "bone":
+            {
+                // Lying with the bone between the front paws, gnawing it with the head on one side.
+                _p.BodyY += -(_rig.LegLength - 0.01f) * w;
+                for (int i = 0; i < 4; i++)
+                    _p.LegFold[i] += 0.8f * w;
+                _p.LegSwing[0] += -1.25f * w;
+                _p.LegSwing[1] += -1.25f * w;
+                _p.LegSwing[2] += 0.4f * w;
+                _p.LegSwing[3] += 0.4f * w;
+                float gnaw = MathF.Sin(t * 9f);
+                _p.HeadPitch += (0.55f + 0.06f * gnaw) * w;
+                _p.HeadRoll += (0.45f + 0.15f * MathF.Sin(t * 1.3f)) * w;
+                _p.HeadY += -0.01f * w;
+                _p.Mouth += (0.35f + 0.3f * gnaw) * w;
+                _p.TailWag += 0.5f * MathF.Sin(t * 10f) * w;
+                _p.Squint += 0.4f * w;
+                break;
+            }
+            case "roll":
+            {
+                // Over onto its back and back again in the mud, legs kicking, very happy.
+                float side = MathF.Sin(t * 1.6f);
+                _p.BodyY += -(_rig.LegLength * 0.9f) * w;
+                _p.BodyRoll += MathF.PI * 0.55f * side * w;
+                for (int i = 0; i < _rig.Legs.Length; i++)
+                {
+                    _p.LegSwing[i] += 0.5f * MathF.Sin(t * 9f + i * 1.7f) * MathF.Abs(side) * w;
+                    _p.LegFold[i] += 0.4f * w;
+                }
+                _p.HeadRoll += -0.3f * side * w;
+                _p.Squint += 1f * w;
+                _p.Cheeks += 0.8f * w;
+                _p.Mouth += 0.4f * w;
+                break;
+            }
+        }
+    }
+
+    /// <summary>Head in the bowl, munching; at the end licking its lips.</summary>
+    private void PoseEat(float t, float w)
+    {
+        float eating = _props.FoodLeft > 0f ? 1f : 0f;
+        _p.BodyPitch += 0.22f * w;
+        _p.BodyY += -0.012f * w;
+        _p.LegSwing[0] += 0.15f * w;
+        _p.LegSwing[1] += 0.15f * w;
+        _p.LegFold[0] += 0.3f * w;
+        _p.LegFold[1] += 0.3f * w;
+        _p.HeadPitch += (0.75f * eating + 0.15f) * w;
+        _p.HeadY += -0.02f * eating * w;
+        _p.HeadForward += 0.02f * eating * w;
+        float chew = MathF.Max(0f, MathF.Sin(t * 11f));
+        _p.Mouth += (0.45f * chew * eating + 0.25f * (1f - eating)) * w;
+        _p.HeadPitch += 0.05f * chew * eating * w;
+        _p.Tongue += (1f - eating) * w;
+        _p.Squint += (0.3f * eating + 0.8f * (1f - eating)) * w;
+        _p.Cheeks += 0.5f * (1f - eating) * w;
+        _p.TailWag += 0.4f * MathF.Sin(t * 3f) * w;
+    }
+
+    /// <summary>A hen pecking at grain: quick dips of the whole front.</summary>
+    private void PosePeck(float t, float w)
+    {
+        float cycle = (t * 1.6f) % 1f;
+        float peck = _props.FoodLeft > 0f && cycle < 0.3f ? MathF.Sin(MathF.PI * cycle / 0.3f) : 0f;
+        _p.BodyPitch += (0.15f + 0.45f * peck) * w;
+        _p.HeadPitch += (0.2f + 0.9f * peck) * w;
+        _p.HeadForward += 0.03f * peck * w;
+        _p.HeadYaw += 0.3f * MathF.Sin(t * 0.8f) * (1f - peck) * w;
+        _p.Mouth += 0.4f * peck * w;
+    }
+
+    /// <summary>
+    /// Playing with the ball (yarn, or a ball for the dog): eyes on it, crouched with the
+    /// rump up, batting at it whenever it comes close to the paws.
+    /// </summary>
+    private void PosePlay(float t, float w)
+    {
+        var ball = _props.BallPosition;
+        float near = Mathf.Clamp(1f - (ball.Z - _props.Front * 0.75f) / (_rig.Height * 0.4f), 0f, 1f);
+        float yaw = Mathf.Atan2(ball.X, MathF.Max(ball.Z, 0.01f));
+        _p.HeadYaw += yaw * w;
+        _p.HeadPitch += (0.35f + 0.25f * near) * w;
+        // A play bow: chest down, rump and tail up, wiggling.
+        _p.BodyPitch += 0.25f * w;
+        _p.BodyY += -_rig.LegLength * 0.25f * w;
+        _p.BodyRoll += 0.06f * MathF.Sin(t * 8f) * (1f - near) * w;
+        _p.LegFold[0] += 0.35f * w;
+        _p.LegFold[1] += 0.35f * w;
+        _p.TailLift += 0.3f * w;
+        _p.TailWag += (_rig.Species == Species.Dog ? 0.7f * MathF.Sin(t * 14f) : 0.5f * MathF.Sin(t * 5f)) * w;
+        // Batting with one paw then the other.
+        float swat = near * MathF.Max(0f, MathF.Sin(t * 9f));
+        int paw = MathF.Sin(t * 1.1f) > 0f ? 1 : -1;
+        Paw(paw, 0.7f * swat, 0.3f * swat, w);
+        _p.Wide += 0.6f * w;
+        _p.Ear[0] += 0.3f * w;
+        _p.Ear[1] += 0.3f * w;
+        if (_rig.Species == Species.Dog)
+        {
+            _p.Mouth += 0.5f * w;
+            _p.Tongue += w;
+        }
+    }
+
     private void PosePetting()
     {
         if (_pet > 0.001f)
@@ -1020,7 +1184,7 @@ public sealed class AnimalAnimator : IPerformer
     private void UpdateFidgets(float dt, MascotState state)
     {
         bool calm = state is MascotState.Idle or MascotState.Sit or MascotState.Cling;
-        if (!Fidgets || !calm || _gesture != null || Talking || Petted || _emotionLevel > 0.3f)
+        if (!Fidgets || !calm || _activity != null || _gesture != null || Talking || Petted || _emotionLevel > 0.3f)
         {
             _fidgetTimer = MathF.Max(_fidgetTimer, 2.5f);
             return;

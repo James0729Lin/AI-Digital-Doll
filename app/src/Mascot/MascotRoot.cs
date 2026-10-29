@@ -285,6 +285,14 @@ public partial class MascotRoot : Node3D
     internal IPerformer? Animator => _animator;
     internal IMascotBody? Body => _body;
 
+    /// <summary>The animal shown, or null for the doll.</summary>
+    internal Species? AnimalSpecies => _body switch
+    {
+        Animals.AnimalBody animal => animal.Species,
+        Animals.ModelAnimalBody model => model.Species,
+        _ => null,
+    };
+
     /// <summary>Screen position just above the character's head (for the speech bubble).</summary>
     internal Vector2I HeadScreenPosition()
     {
@@ -304,6 +312,12 @@ public partial class MascotRoot : Node3D
     {
         if (_brain == null || _animator == null)
             return;
+        if (ActivityCatalog.Find(action) is ActivityInfo activity)
+        {
+            if (AnimalSpecies is Species species && activity.For(species))
+                _brain.StrikePose(activity.Grounded, activity.Seconds, activity.Id);
+            return;
+        }
         if (PoseCatalog.Find(action) is PoseInfo pose)
         {
             _brain.StrikePose(pose.Base != PoseBase.Stand, pose.Seconds, pose.Id);
@@ -622,6 +636,7 @@ public partial class MascotRoot : Node3D
                 },
                 _random, x, BuildSurroundings()) { Staying = staying };
         }
+        _brain.Activities = AnimalSpecies is Species animal ? ActivityCatalog.For(animal) : Array.Empty<ActivityInfo>();
         _chat?.CharacterChanged(body.Name, body.Persona);
     }
 
@@ -754,7 +769,7 @@ public partial class MascotRoot : Node3D
         _menu.Clear();
         _menu.AddItem(Tr("MENU_CHAT"), MenuChat);
         _menu.AddItem(Tr("MENU_AI_SETTINGS"), MenuAiSettings);
-        _menu.AddSubmenuNodeItem(Tr("MENU_ACTIONS"), Chat.ActionMenu.Create(key => Tr(key), PerformCommand));
+        _menu.AddSubmenuNodeItem(Tr("MENU_ACTIONS"), Chat.ActionMenu.Create(key => Tr(key), PerformCommand, () => AnimalSpecies));
         _menu.AddSeparator();
         if (BodyEditorEnabled)
         {

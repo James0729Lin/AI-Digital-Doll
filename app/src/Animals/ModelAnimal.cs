@@ -57,7 +57,7 @@ public sealed class ModelAnimalBody : IMascotBody
         _model = model;
         _meshes = model.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>().ToList();
         Size = box.Size;
-        _performer = new ModelAnimalPerformer(root, body, player, box.Size, random);
+        _performer = new ModelAnimalPerformer(species, root, body, player, box.Size, random);
     }
 
     /// <summary>Whether this species comes in this version.</summary>
@@ -123,6 +123,8 @@ public sealed class ModelAnimalBody : IMascotBody
         MascotState.Sit or MascotState.FloorSit or MascotState.Tumble => facing * 0.5f,
         MascotState.Dragged => facing * 0.4f,
         MascotState.Dance => 0f,
+        // Side-on enough for what it is doing in front of it (a bowl, a ball) to show.
+        MascotState.Pose => facing * 0.95f,
         _ when faceUser => facing * 0.35f,
         _ => facing * 0.7f,
     };
@@ -244,15 +246,38 @@ public sealed class ModelAnimalPerformer : IPerformer
     private float _climb, _lie, _sprawl, _tumble, _sit, _fall, _drag, _land, _slip, _hang, _getUp, _jump;
     private float _dangle, _dangleVelocity, _lookYaw;
 
-    public ModelAnimalPerformer(Node3D root, Node3D body, AnimationPlayer? player, Vector3 size, Random random)
+    // Activities: the props, and the front legs posed over the clips (batting a ball,
+    // washing the face) where the model has them as nodes of their own.
+    private readonly ActivityProps _props;
+    private readonly Node3D?[] _frontLegs = new Node3D?[2];
+    private readonly Node3D?[] _backLegs = new Node3D?[2];
+    private readonly Dictionary<Node3D, (Transform3D Base, Transform3D Written)> _legs = new();
+    private string? _activity, _poseId;
+    private float _act;
+
+    public ModelAnimalPerformer(Species species, Node3D root, Node3D body, AnimationPlayer? player, Vector3 size, Random random)
     {
         _root = root;
         Body = body;
         _player = player;
         _size = size;
         _random = random;
+        _props = new ActivityProps(root.GetParent<Node3D>(), species, size.Y, size.Z);
+        foreach (var node in body.FindChildren("*leg*", "Node3D", true, false).Cast<Node3D>())
+        {
+            string name = node.Name.ToString().ToLowerInvariant();
+            int side = name.Contains("left") ? 0 : name.Contains("right") ? 1 : -1;
+            if (side < 0)
+                continue;
+            if (name.Contains("front"))
+                _frontLegs[side] ??= node;
+            else if (name.Contains("back"))
+                _backLegs[side] ??= node;
+        }
         if (player == null)
             return;
+        // Advanced by hand, so the legs can be posed over the clip afterwards.
+        player.CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual;
         // Clip names differ by pack ("walk", "CatArmature|Walking"…): find each by keyword.
         foreach (string name in player.GetAnimationList())
         {
@@ -304,8 +329,20 @@ public sealed class ModelAnimalPerformer : IPerformer
 
     public void StopGestures() => _gesture = null;
 
-    /// <summary>The models have no hands for the doll's poses: a happy wriggle instead.</summary>
-    public void StrikePose(string id) => Play(new GestureCue(Gesture.Nod, 1.6f, 0.8f, false), now: true);
+    /// <summary>
+    /// An activity (see <see cref="ActivityCatalog"/>) is done for as long as the pose is
+    /// held; the models have no hands for the doll's poses, so those get a happy wriggle.
+    /// </summary>
+    public void StrikePose(string id)
+    {
+        if (id == _poseId)
+            return;
+        _poseId = id;
+        if (ActivityCatalog.Has(id))
+            _activity = id;
+        else
+            Play(new GestureCue(Gesture.Nod, 1.6f, 0.8f, false), now: true);
+    }
 
     public void Feel(Emotion emotion, float intensity, float seconds = 4f)
     {
@@ -321,6 +358,10 @@ public sealed class ModelAnimalPerformer : IPerformer
         if (state == MascotState.Lie && _state != MascotState.Lie)
             _lieSide = _random.Next(2) == 0 ? -1 : 1;
         _state = state;
+        if (state != MascotState.Pose)
+            _activity = _poseId = null;
+        _props.Update(dt, _activity, state);
+        Ease(ref _act, _activity != null ? 1f : 0f, dt, 5f);
         _emotionHold -= dt;
         if (_emotionHold <= 0f)
             _emotion = Emotion.Neutral;
@@ -349,10 +390,80 @@ public sealed class ModelAnimalPerformer : IPerformer
         _dangle = Mathf.Clamp(_dangle + _dangleVelocity * dt, -0.9f, 0.9f);
         _lookYaw = Mathf.Lerp(_lookYaw, Mathf.Clamp(LookYaw, -0.6f, 0.6f), 1f - MathF.Exp(-6f * dt));
 
-        var (clip, speed) = ChooseClip(state, speedMetres, climbSpeedMetres, running, grip);
+        var (clip, speed) = _activity != null ? ActivityClip(_activity) : ChooseClip(state, speedMetres, climbSpeedMetres, running, grip);
         PlayClip(clip, speed);
+        _player?.Advance(dt);
         PoseWhole();
+        PoseLegs();
     }
+
+    /// <summary>Munching in the eat clip; otherwise idling, with the legs and body posed over it.</summary>
+    private (string? Clip, float Speed) ActivityClip(string activity) => activity switch
+    {
+        "eat" => _props.FoodLeft > 0f ? ("eat", 1f) : ("yes", 1f),
+        "bone" => ("eat", 0.7f),
+        "yarn" or "ball" => ("idle", 1.6f),
+        "roll" => ("idle", 2f),
+        _ => ("idle", 1f),
+    };
+
+    /// <summary>
+    /// Front legs batting at the ball or wiping the face, legs kicking in the mud, paws out
+    /// for the bone: turned on top of whatever the clip did to them this frame.
+    /// </summary>
+    private void PoseLegs()
+    {
+        float w = _act;
+        float t = _props.Time;
+        float[] front = { 0f, 0f }, back = { 0f, 0f };
+        if (w > 0.001f)
+        {
+            switch (_activity)
+            {
+                case "yarn":
+                case "ball":
+                {
+                    float swat = BallNear() * MathF.Max(0f, MathF.Sin(t * 9f));
+                    front[MathF.Sin(t * 1.1f) > 0f ? 0 : 1] = -1.3f * swat;
+                    break;
+                }
+                case "wash_face":
+                    front[0] = -1.9f - 0.25f * MathF.Sin(t * 7f);
+                    break;
+                case "bone":
+                    front[0] = front[1] = -1.2f;
+                    break;
+                case "roll":
+                    for (int i = 0; i < 2; i++)
+                    {
+                        front[i] = 0.6f * MathF.Sin(t * 9f + i * 1.7f);
+                        back[i] = 0.6f * MathF.Sin(t * 9f + i * 1.7f + 2f);
+                    }
+                    break;
+            }
+        }
+        for (int i = 0; i < 2; i++)
+        {
+            Turn(_frontLegs[i], front[i] * w);
+            Turn(_backLegs[i], back[i] * w);
+        }
+    }
+
+    private void Turn(Node3D? leg, float swing)
+    {
+        if (leg == null)
+            return;
+        // A leg the clip did not touch still has last frame's turn: start from its base again.
+        var now = leg.Transform;
+        var start = _legs.TryGetValue(leg, out var last) && now.IsEqualApprox(last.Written) ? last.Base : now;
+        var turned = MathF.Abs(swing) < 0.0001f ? start : new Transform3D(start.Basis * new Basis(Vector3.Right, swing), start.Origin);
+        leg.Transform = turned;
+        _legs[leg] = (start, turned);
+    }
+
+    /// <summary>How close the ball has come to the front paws, 0 to 1.</summary>
+    private float BallNear() =>
+        Mathf.Clamp(1f - (_props.BallPosition.Z - _props.Front * 0.75f) / (_size.Y * 0.4f), 0f, 1f);
 
     private (string? Clip, float Speed) ChooseClip(MascotState state, float speedMetres, float climbSpeedMetres, bool running, ClimbGrip grip)
     {
@@ -404,7 +515,7 @@ public sealed class ModelAnimalPerformer : IPerformer
 
     private void UpdateFidgets(float dt, MascotState state)
     {
-        if (!Fidgets || state != MascotState.Idle || _gesture != null || Talking || Petted)
+        if (!Fidgets || state != MascotState.Idle || _activity != null || _gesture != null || Talking || Petted)
         {
             _fidgetTimer = MathF.Max(_fidgetTimer, 2.5f);
             return;
@@ -472,9 +583,55 @@ public sealed class ModelAnimalPerformer : IPerformer
             _ => 0f,
         };
         yaw += 0.5f * _lookYaw * (1f - MathF.Max(_climb, MathF.Max(_lie, _sprawl)));
+        PoseActivity(ref pitch, ref roll, ref yaw, ref offset, ref squash);
 
         _root.Transform = new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, roll), EulerOrder.Yxz), offset);
         Body.Scale = new Vector3(1f - 0.4f * squash, 1f + squash, 1f - 0.4f * squash);
+    }
+
+    /// <summary>The whole-model part of an activity: leaning into the bowl, a play bow, rolling over.</summary>
+    private void PoseActivity(ref float pitch, ref float roll, ref float yaw, ref Vector3 offset, ref float squash)
+    {
+        float w = _act;
+        if (w <= 0.001f || _activity == null)
+            return;
+        float t = _props.Time, h = _size.Y;
+        switch (_activity)
+        {
+            case "eat":
+                pitch += (_props.FoodLeft > 0f ? 0.18f : 0f) * w;
+                break;
+            case "yarn":
+            case "ball":
+            {
+                // Eyes on the ball, chest down and rump up, lunging when it comes close.
+                var ball = _props.BallPosition;
+                float near = BallNear();
+                yaw += 0.6f * Mathf.Atan2(ball.X, MathF.Max(ball.Z, 0.01f)) * w;
+                pitch += (0.16f + 0.08f * near) * w;
+                offset.Z += h * 0.12f * near * MathF.Max(0f, MathF.Sin(t * 9f)) * w;
+                roll += 0.06f * MathF.Sin(t * 8f) * (1f - near) * w;
+                squash += -0.05f * w;
+                break;
+            }
+            case "wash_face":
+                pitch += -0.35f * w;
+                roll += 0.08f * MathF.Sin(t * 7f) * w;
+                break;
+            case "bone":
+                squash += -0.25f * w;
+                roll += 0.12f * w;
+                break;
+            case "roll":
+            {
+                float side = MathF.Sin(t * 1.6f);
+                roll += 1.1f * side * w;
+                offset.Y += h * 0.25f * MathF.Abs(side) * w;
+                offset.X += -h * 0.2f * side * w;
+                squash += -0.15f * w;
+                break;
+            }
+        }
     }
 
     private static void Ease(ref float value, float target, float dt, float rate = WeightRate) =>

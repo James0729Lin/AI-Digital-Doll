@@ -201,6 +201,15 @@ msgstr "躺下"
 msgid "BODY_GET_UP"
 msgstr "起來"
 
+msgid "BODY_SLEEP"
+msgstr "睡覺"
+
+msgid "BODY_STRETCH"
+msgstr "伸懶腰"
+
+msgid "ACTION_GROUP_ACTIVITIES"
+msgstr "日常活動"
+
 msgid "POSE_GROUP_CUTE"
 msgstr "可愛手勢"
 

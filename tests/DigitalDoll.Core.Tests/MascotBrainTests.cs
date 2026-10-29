@@ -303,6 +303,30 @@ public class MascotBrainTests
     }
 
     [Fact]
+    public void AnimalsDoTheirActivitiesOnTheirOwn()
+    {
+        var done = new HashSet<string>();
+        foreach (int seed in new[] { 1, 2, 3 })
+        {
+            var cat = Create(seed);
+            cat.Activities = ActivityCatalog.For(Species.Cat);
+            for (int i = 0; i < 60 * 300; i++)
+            {
+                cat.Update(1f / 60f);
+                if (cat.State == MascotState.Pose)
+                {
+                    var activity = ActivityCatalog.Find(cat.PoseId!);
+                    Assert.NotNull(activity);
+                    Assert.True(activity!.For(Species.Cat));
+                    done.Add(activity.Id);
+                }
+            }
+        }
+        Assert.True(done.Count >= 2, "several different activities");
+        Assert.DoesNotContain("bone", done);
+    }
+
+    [Fact]
     public void RequestsOnAWallAreCarriedOutAfterHoppingDown()
     {
         var brain = Create();

@@ -142,6 +142,7 @@ public sealed class MascotBrain
     private bool _controlledFall;
     private bool _poseGrounded;
     private string? _lastRandomPose;
+    private string? _lastActivity;
     private Action? _onLanded;
     private Platform? _pin;
 
@@ -226,6 +227,9 @@ public sealed class MascotBrain
 
     /// <summary>The pose being held (an id from <c>PoseCatalog</c>) while the state is <see cref="MascotState.Pose"/>.</summary>
     public string? PoseId { get; private set; }
+
+    /// <summary>What an animal does now and then on its own (see <see cref="ActivityCatalog"/>); empty for the doll.</summary>
+    public IReadOnlyList<ActivityInfo> Activities { get; set; } = Array.Empty<ActivityInfo>();
 
     /// <summary>Seconds left during which the mascot stays where it is (see <see cref="Hold"/>).</summary>
     public float HoldTime => _hold;
@@ -653,6 +657,8 @@ public sealed class MascotBrain
             var stay = new List<(float Weight, Action Act)> { (2f, () => EnterIdle()), (0.5f, StartDance) };
             if (_tuning.RandomPoses)
                 stay.Add((1.2f, () => StrikeRandomPose(here)));
+            if (Activities.Count > 0)
+                stay.Add((1.2f, StartRandomActivity));
             Choose(stay);
             return;
         }
@@ -670,6 +676,8 @@ public sealed class MascotBrain
         };
         if (_tuning.RandomPoses)
             options.Add((0.9f, () => StrikeRandomPose(here)));
+        if (Activities.Count > 0)
+            options.Add((Staying ? 1.4f : 0.9f, StartRandomActivity));
         if (here.Width >= _tuning.Height * 1.3f)
             options.Add((Staying ? 0.6f : 0.45f, () => { _plan = Plan.Lie; EnterWalk(LieSpot(here, PickWalkTarget(here, nearby: true))); }));
         if (here.Width >= _tuning.Height * 0.8f)
@@ -1153,6 +1161,17 @@ public sealed class MascotBrain
         _lastRandomPose = pose.Id;
         float seconds = pose.Seconds * Lerp(0.8f, 1.4f, (float)_random.NextDouble());
         StrikePose(pose.Base != PoseBase.Stand, seconds, pose.Id);
+    }
+
+    /// <summary>One of the animal's activities, not the last one done.</summary>
+    private void StartRandomActivity()
+    {
+        var choices = Activities.Where(a => a.Id != _lastActivity).ToList();
+        if (choices.Count == 0)
+            choices = Activities.ToList();
+        var activity = choices[_random.Next(choices.Count)];
+        _lastActivity = activity.Id;
+        StrikePose(activity.Grounded, activity.Seconds * Lerp(0.8f, 1.3f, (float)_random.NextDouble()), activity.Id);
     }
 
     private void StartDance()

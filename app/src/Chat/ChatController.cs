@@ -52,6 +52,7 @@ public partial class ChatController : Node
         _input.Submitted += Ask;
         _input.StopRequested += Stop;
         _input.ActionPicked += action => _root.PerformCommand(action);
+        _input.Species = () => _root.AnimalSpecies;
         _log = ChatLogStore.Load();
         _contextSince = _log.NextId;
         _log.Changed += () =>
@@ -164,7 +165,7 @@ public partial class ChatController : Node
         var animator = _root.Animator!;
 
         // Requests the character can act on right away ("揮揮手", "坐下").
-        foreach (var action in LocalDirector.Command(input))
+        foreach (var action in LocalDirector.Command(input, _root.AnimalSpecies))
             _root.PerformCommand(action);
 
         var (routed, text) = _settings.Route(input);
@@ -187,7 +188,7 @@ public partial class ChatController : Node
 
         _conversation.AddUser(text);
         _log.AddUser(text, DateTimeOffset.Now);
-        var request = new ChatRequest(config.Model, Conversation.SystemPrompt(_name == null ? _settings : WithName(_settings, _name), _persona), _conversation.Turns.ToList());
+        var request = new ChatRequest(config.Model, Conversation.SystemPrompt(_name == null ? _settings : WithName(_settings, _name), _persona, _root.AnimalSpecies), _conversation.Turns.ToList());
         var cancel = _request = new CancellationTokenSource();
         var script = new ReplyScript();
         _source = config.Name;
@@ -279,7 +280,7 @@ public partial class ChatController : Node
         foreach (var action in cue.Actions)
         {
             // Poses and whole-body actions move the character; the rest are gestures.
-            if (PoseCatalog.Has(action) || PoseCatalog.IsBodyAction(action))
+            if (PoseCatalog.Has(action) || PoseCatalog.IsBodyAction(action) || ActivityCatalog.Has(action))
                 _root.PerformCommand(action);
             else if (_director.Pick(action, cue.Intensity) is GestureCue gesture)
                 animator.Play(gesture);
