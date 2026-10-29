@@ -178,7 +178,7 @@ public sealed class AnimalAnimator : IPerformer
         if (grip == ClimbGrip.Steady)
             _climbPhase = (_climbPhase + dt * Mathf.Tau * MathF.Abs(climbSpeedMetres) / (0.6f * _rig.Height)) % Mathf.Tau;
         Ease(ref _slip, state == MascotState.Climb && grip == ClimbGrip.Slipping ? 1f : 0f, dt, 16f);
-        Ease(ref _hang, state == MascotState.Climb && grip == ClimbGrip.Hanging ? 1f : 0f, dt, 7f);
+        Ease(ref _hang, (state is MascotState.Climb or MascotState.Cling) && grip == ClimbGrip.Hanging ? 1f : 0f, dt, 7f);
         Ease(ref _climbUp, state == MascotState.Climb && grip == ClimbGrip.Steady && climbSpeedMetres < 0f ? 1f : 0f, dt, 4f);
 
         float push = -dragVelocityMetres * 1.5f;

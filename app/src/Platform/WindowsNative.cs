@@ -90,8 +90,9 @@ public static class WindowsNative
 
     /// <summary>
     /// Visible application windows in screen pixels, top of the Z-order first. Minimised,
-    /// cloaked (other virtual desktops, suspended apps), tool and shell windows, and
-    /// <paramref name="exclude"/> (our own window) are left out. Empty elsewhere.
+    /// cloaked (other virtual desktops, suspended apps), tool and shell windows,
+    /// <paramref name="exclude"/> and every other window of this program (the chat box,
+    /// speech bubble, settings) are left out. Empty elsewhere.
     /// </summary>
     public static List<(long Id, Rect2I Bounds)> VisibleWindows(long exclude)
     {
@@ -101,9 +102,13 @@ public static class WindowsNative
         try
         {
             var name = new StringBuilder(256);
+            uint self = (uint)System.Environment.ProcessId;
             EnumWindowsProc callback = (hwnd, _) =>
             {
                 if ((long)hwnd == exclude || !IsWindowVisible(hwnd) || IsIconic(hwnd))
+                    return true;
+                GetWindowThreadProcessId(hwnd, out uint owner);
+                if (owner == self)
                     return true;
                 long style = GetWindowLongPtrW(hwnd, GwlExStyle).ToInt64();
                 if ((style & WsExToolWindow) != 0 || GetWindowTextLengthW(hwnd) == 0)
@@ -148,6 +153,9 @@ public static class WindowsNative
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
