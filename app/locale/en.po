@@ -230,3 +230,18 @@ msgstr "Actions"
 
 msgid "CHAT_ACTIONS_TIP"
 msgstr "Pick something for her to do"
+
+msgid "CHAT_HISTORY"
+msgstr "Chat history"
+
+msgid "CHAT_CLEAR"
+msgstr "Clear all"
+
+msgid "CHAT_CLEAR_CONFIRM"
+msgstr "Delete the whole chat history? This cannot be undone."
+
+msgid "CHAT_NO_HISTORY"
+msgstr "No messages yet. Say hi!"
+
+msgid "CHAT_DELETE_TIP"
+msgstr "Delete this message"

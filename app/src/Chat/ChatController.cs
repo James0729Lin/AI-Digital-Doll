@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using DigitalDoll.Core.Acting;
 using DigitalDoll.Core.Ai;
@@ -22,6 +23,10 @@ public partial class ChatController : Node
     private AiSettingsWindow _settingsWindow = null!;
     private AiSettings _settings = new();
     private readonly Conversation _conversation = new();
+    private ChatLog _log = new();
+
+    /// <summary>The first message of the AI's current context (later ones are sent along as history).</summary>
+    private long _contextSince;
     private PerformanceDirector _director = null!;
 
     private string? _name, _persona;
@@ -47,6 +52,24 @@ public partial class ChatController : Node
         _input.Submitted += Ask;
         _input.StopRequested += Stop;
         _input.ActionPicked += action => _root.PerformCommand(action);
+        _log = ChatLogStore.Load();
+        _contextSince = _log.NextId;
+        _log.Changed += () =>
+        {
+            ChatLogStore.Save(_log);
+            _input.ShowHistory(_log.Entries);
+        };
+        _input.DeleteRequested += id =>
+        {
+            if (_log.Remove(id))
+                _conversation.Replace(_log.Context(_contextSince));
+        };
+        _input.ClearRequested += () =>
+        {
+            _log.Clear();
+            _conversation.Clear();
+        };
+        _input.ShowHistory(_log.Entries);
         _settingsWindow = new AiSettingsWindow();
         AddChild(_settingsWindow);
         _settingsWindow.Saved += saved => _settings = saved;
@@ -69,7 +92,9 @@ public partial class ChatController : Node
             return;
         _name = name;
         _persona = persona;
+        // The history is kept; the AI's context starts again for the new character.
         _conversation.Clear();
+        _contextSince = _log.NextId;
     }
 
     public void OpenChat() => _input.Open(_settings, _root.HeadScreenPosition() + new Vector2I(0, (int)(_root.CharacterHeightPixels * 1.05f)));
@@ -161,7 +186,8 @@ public partial class ChatController : Node
             return;
 
         _conversation.AddUser(text);
-        var request = new ChatRequest(config.Model, Conversation.SystemPrompt(_name == null ? _settings : WithName(_settings, _name), _persona), _conversation.Turns);
+        _log.AddUser(text, DateTimeOffset.Now);
+        var request = new ChatRequest(config.Model, Conversation.SystemPrompt(_name == null ? _settings : WithName(_settings, _name), _persona), _conversation.Turns.ToList());
         var cancel = _request = new CancellationTokenSource();
         var script = new ReplyScript();
         _source = config.Name;
@@ -193,6 +219,7 @@ public partial class ChatController : Node
                 return;
             }
             _conversation.AddAssistant(script.Raw);
+            _log.AddAssistant(script.Text, script.Raw, config.Name, DateTimeOffset.Now);
         }
         catch (OperationCanceledException)
         {

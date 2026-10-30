@@ -160,6 +160,66 @@ public class ActingTests
     }
 
     [Fact]
+    public void ChatHistoryIsSavedAndReadBack()
+    {
+        var log = new ChatLog();
+        var time = new DateTimeOffset(2026, 10, 29, 16, 0, 0, TimeSpan.FromHours(8));
+        log.AddUser("你好", time);
+        log.AddAssistant("嗨！", "⟨happy:0.8 wave⟩ 嗨！", "Claude", time.AddSeconds(3));
+        var back = ChatLog.FromJson(log.ToJson());
+        Assert.Equal(2, back.Entries.Count);
+        Assert.Equal(ChatRole.User, back.Entries[0].Role);
+        Assert.Equal("嗨！", back.Entries[1].Text);
+        Assert.Equal("Claude", back.Entries[1].Source);
+        Assert.Equal(time.AddSeconds(3), back.Entries[1].Time);
+        // New messages carry on after the saved ones.
+        Assert.True(back.AddUser("再見", time).Id > back.Entries[1].Id);
+        Assert.Empty(ChatLog.FromJson("not json").Entries);
+        Assert.Empty(ChatLog.FromJson(null).Entries);
+    }
+
+    [Fact]
+    public void DeletedMessagesLeaveTheHistoryAndTheAiContext()
+    {
+        var log = new ChatLog();
+        var t = DateTimeOffset.Now;
+        var q1 = log.AddUser("第一個問題", t);
+        var a1 = log.AddAssistant("第一個回答", "⟨happy⟩ 第一個回答", "AI", t);
+        log.AddUser("第二個問題", t);
+        log.AddAssistant("第二個回答", "第二個回答", "AI", t);
+        int changes = 0;
+        log.Changed += () => changes++;
+
+        Assert.True(log.Remove(a1.Id));
+        Assert.True(log.Remove(q1.Id));
+        Assert.Equal(2, changes);
+        var conversation = new Conversation();
+        conversation.Replace(log.Context(sinceId: 0));
+        Assert.Equal(new[] { "第二個問題", "第二個回答" }, conversation.Turns.Select(turn => turn.Text));
+
+        // The AI gets its own words back with their cues.
+        var cued = new ChatLog();
+        cued.AddUser("q", t);
+        cued.AddAssistant("第一個回答", "⟨happy⟩ 第一個回答", "AI", t);
+        Assert.Equal("⟨happy⟩ 第一個回答", cued.Context(0).Last().Text);
+
+        log.Clear();
+        Assert.Empty(log.Entries);
+        Assert.Empty(log.Context(0));
+    }
+
+    [Fact]
+    public void ChatHistoryKeepsTheNewestMessages()
+    {
+        var log = new ChatLog(maxEntries: 5);
+        for (int i = 0; i < 12; i++)
+            log.AddUser($"訊息 {i}", DateTimeOffset.Now);
+        Assert.Equal(5, log.Entries.Count);
+        Assert.Equal("訊息 11", log.Entries[^1].Text);
+        Assert.Equal("訊息 7", log.Entries[0].Text);
+    }
+
+    [Fact]
     public void ConversationKeepsRecentTurnsStartingWithTheUser()
     {
         var chat = new Conversation(maxTurns: 4);
