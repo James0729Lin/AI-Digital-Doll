@@ -188,6 +188,11 @@ internal sealed class Snapshot
                         brain.Update(1f / 60f);
                     brain.StrikePose(pose.Base != PoseBase.Stand, float.MaxValue, pose.Id);
                 }
+                // An animal's activity (eating, playing with yarn…), on the floor.
+                else if (_strike != null && ActivityCatalog.Find(_strike) is ActivityInfo activity)
+                {
+                    brain.StrikePose(activity.Grounded, float.MaxValue, activity.Id);
+                }
                 break;
             case "land":
                 brain.BeginDrag();

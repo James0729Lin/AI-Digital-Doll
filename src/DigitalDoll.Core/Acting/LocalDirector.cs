@@ -74,7 +74,8 @@ public static partial class LocalDirector
     /// Besides the performance actions these can be whole-body actions
     /// (<see cref="PoseCatalog.BodyActions"/>) and pose ids (<see cref="PoseCatalog"/>).
     /// </summary>
-    public static IReadOnlyList<string> Command(string userText)
+    /// <param name="species">The animal, which also has its activities (<see cref="ActivityCatalog"/>); null for the doll.</param>
+    public static IReadOnlyList<string> Command(string userText, Species? species = null)
     {
         var s = userText.Trim().ToLowerInvariant();
         if (s.Length == 0 || s.Length > 40)
@@ -85,8 +86,10 @@ public static partial class LocalDirector
             if (words.Any(w => s.Contains(w, StringComparison.Ordinal)) && !result.Contains(action))
                 result.Add(action);
         }
-        // A named pose takes precedence over the gestures that share its words.
-        if (PoseCatalog.Match(s) is PoseInfo pose)
+        // A named pose or activity takes precedence over the gestures that share its words.
+        if (species is Species animal && ActivityCatalog.Match(s, animal) is ActivityInfo activity)
+            return new[] { activity.Id };
+        if (species == null && PoseCatalog.Match(s) is PoseInfo pose)
             return new[] { pose.Id };
         Check("come", "過來", "來這裡", "來這邊", "come here", "come over");
         Check("get_up", "起來", "起床", "站起來", "get up", "stand up");

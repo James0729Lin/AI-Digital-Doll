@@ -201,6 +201,15 @@ msgstr "Lie down"
 msgid "BODY_GET_UP"
 msgstr "Get up"
 
+msgid "BODY_SLEEP"
+msgstr "Sleep"
+
+msgid "BODY_STRETCH"
+msgstr "Stretch"
+
+msgid "ACTION_GROUP_ACTIVITIES"
+msgstr "Things to do"
+
 msgid "POSE_GROUP_CUTE"
 msgstr "Cute gestures"
 

@@ -67,6 +67,8 @@ public sealed class AnimalBody : IMascotBody
         MascotState.Lie or MascotState.Landing or MascotState.GetUp => facing * 1.0f,
         MascotState.Sit or MascotState.Tumble => facing * 0.5f,
         MascotState.Dragged => facing * 0.4f,
+        // Side-on enough for what it is doing in front of it (a bowl, a ball) to show.
+        MascotState.Pose => facing * 0.95f,
         _ when faceUser => facing * 0.35f,
         _ => facing * 0.7f,
     };

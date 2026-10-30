@@ -306,4 +306,37 @@ public class ActingTests
         Assert.Equal(ChatErrorKind.Unauthorized, error.Kind);
         Assert.Contains("bad key", error.Message);
     }
+
+    [Fact]
+    public void AnimalsAreAskedForTheirOwnActivities()
+    {
+        Assert.Equal(new[] { "eat" }, LocalDirector.Command("去吃飯吧", Species.Cat));
+        Assert.Equal(new[] { "yarn" }, LocalDirector.Command("玩毛線球給我看", Species.Cat));
+        Assert.Equal(new[] { "ball" }, LocalDirector.Command("來玩球", Species.Dog));
+        Assert.Equal(new[] { "roll" }, LocalDirector.Command("去泥巴裡打滾", Species.Pig));
+        // Only its own: a cat has no bone, and the doll has no activities.
+        Assert.DoesNotContain("bone", LocalDirector.Command("啃骨頭", Species.Cat));
+        Assert.DoesNotContain("eat", LocalDirector.Command("去吃飯吧"));
+        // Words inside other words do not count.
+        Assert.Empty(LocalDirector.Command("great", Species.Cat));
+
+        var prompt = Conversation.SystemPrompt(new AiSettings(), Creatures.Persona(Species.Cat), Species.Cat);
+        Assert.Contains("yarn", prompt);
+        Assert.DoesNotContain("heart_hands", prompt);
+        Assert.DoesNotContain("bone", prompt);
+        Assert.True(PerformanceDirector.IsAction("wash_face"));
+        Assert.Contains("yarn", CueParser.Parse("happy:0.8 yarn")!.Actions);
+    }
+
+    [Fact]
+    public void EachAnimalEatsFromItsOwnDish()
+    {
+        var eat = ActivityCatalog.Find("eat")!;
+        Assert.Equal(ActivityProp.FoodBowl, eat.Prop(Species.Cat));
+        Assert.Equal(ActivityProp.FoodBowl, eat.Prop(Species.Dog));
+        Assert.Equal(ActivityProp.Trough, eat.Prop(Species.Pig));
+        Assert.Equal(ActivityProp.Grain, eat.Prop(Species.Chicken));
+        foreach (var species in Enum.GetValues<Species>())
+            Assert.Contains(ActivityCatalog.For(species), a => a.Id == "eat");
+    }
 }

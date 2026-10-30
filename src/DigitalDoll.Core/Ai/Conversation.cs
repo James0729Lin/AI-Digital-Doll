@@ -59,8 +59,12 @@ public sealed class Conversation
     }
 
     /// <param name="creature">Who the character is, for animals (see <see cref="Creatures.Persona"/>); null for the doll.</param>
-    public static string SystemPrompt(AiSettings settings, string? creature = null)
+    /// <param name="species">The animal, whose activities replace the doll's poses; null for the doll.</param>
+    public static string SystemPrompt(AiSettings settings, string? creature = null, Species? species = null)
     {
+        string poses = species is Species animal
+            ? $"活動：{string.Join(", ", ActivityCatalog.For(animal).Select(a => $"{a.Id}（{a.Description}）"))}"
+            : $"姿勢：{string.Join(", ", PoseCatalog.All.Select(p => $"{p.Id}（{p.Description}）"))}";
         string name = string.IsNullOrWhiteSpace(settings.CharacterName) ? "小桃" : settings.CharacterName.Trim();
         string personality = string.IsNullOrWhiteSpace(settings.Personality) ? "活潑、溫柔" : settings.Personality.Trim();
         return $"""
@@ -75,7 +79,7 @@ public sealed class Conversation
             - 動作 0–2 個，只能是：{string.Join(", ", PerformanceDirector.PromptActions)}（count 可加數字，如 count:2）。
             - 使用者請你做全身動作或擺姿勢時（例如「過來」「跳支舞」「坐下休息」「比個愛心」），在標記裡放對應的動作，一則回答最多一個：
               全身動作：{string.Join(", ", PoseCatalog.BodyActions)}（come 走過來、floor_sit 坐地上、get_up 起來）
-              姿勢：{string.Join(", ", PoseCatalog.All.Select(p => $"{p.Id}（{p.Description}）"))}
+              {poses}
             - 依內容挑最貼切的動作，同一則回答不要重複同一個動作。
             - 標記只用來表演，使用者看不到；不要解釋或提到標記。
             """;

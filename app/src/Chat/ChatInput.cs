@@ -43,6 +43,9 @@ public partial class ChatInput : Window
     /// <summary>"Clear all" was confirmed.</summary>
     public event Action? ClearRequested;
 
+    /// <summary>The animal shown (its own actions in the Actions menu), or null for the doll.</summary>
+    public Func<DigitalDoll.Core.Species?> Species { get; set; } = () => null;
+
     public override void _Ready()
     {
         Title = Tr("CHAT_TITLE");
@@ -103,7 +106,7 @@ public partial class ChatInput : Window
         _field.TextSubmitted += _ => Send();
         row.AddChild(_field);
         // Actions right next to the field: pick one instead of typing it.
-        var actionMenu = ActionMenu.Create(key => Tr(key), id => ActionPicked?.Invoke(id));
+        var actionMenu = ActionMenu.Create(key => Tr(key), id => ActionPicked?.Invoke(id), () => Species());
         AddChild(actionMenu);
         var actions = new Button { Text = Tr("CHAT_ACTIONS"), TooltipText = Tr("CHAT_ACTIONS_TIP") };
         actions.Pressed += () =>
