@@ -25,6 +25,11 @@ public sealed partial class ModelAnimalPerformer
     /// <summary>Metres per stride and the share of it each paw is on the ground.</summary>
     private const float WalkStride = 0.2f, GallopStride = 0.3f, WalkDuty = 0.62f, GallopDuty = 0.36f;
 
+    // Up a wall: the front paws in turn, the back pair pushing almost together.
+    private static readonly float[] ClimbOffsets = { 0f, 0.5f, 0.25f, 0.3f };
+    private const float ClimbStride = 0.14f, ClimbDuty = 0.6f;
+    private float _climbGait;
+
     private ModelAnimalRig? _rig;
     private float _walk, _run, _dance, _lookPitch, _nextGlance = 3f, _glance, _glanceHold;
     private float _gait, _gaitSpeed;
@@ -35,11 +40,14 @@ public sealed partial class ModelAnimalPerformer
     private float _nextBlink = 2f, _blink;
 
     /// <summary>Gives a model without eyes a pair (see <see cref="ModelAnimalEyes"/>).</summary>
-    public void AddEyes(Vector3 at, float radius, float pupilWidth, float turn)
+    public void AddEyes(ModelAnimalEyes.Shape shape)
     {
         if (_rig != null)
-            _eyes = new ModelAnimalEyes(_rig.AttachToHead(), at, radius, pupilWidth, turn);
+            _eyes = new ModelAnimalEyes(_rig.AttachToHead(), shape);
     }
+
+    /// <summary>Where it is held when picked up, for a model with bones.</summary>
+    public Vector3? Neck => _rig?.NeckWorld;
 
     public void SetEyeColour(Color colour) => _eyes?.SetColour(colour);
 
@@ -69,7 +77,7 @@ public sealed partial class ModelAnimalPerformer
         _eyes.Pose(dt, closing ? 0f : open, startled ? 1f : play ? 0.4f : 0f, startled || play ? 1f : 0f);
     }
 
-    private void PoseBones(float dt, float speedMetres)
+    private void PoseBones(float dt, float speedMetres, float climbSpeedMetres, ClimbGrip grip)
     {
         var rig = _rig!;
         if (_act < 0.01f)
@@ -84,7 +92,7 @@ public sealed partial class ModelAnimalPerformer
         BonesLie(rig);
         BonesGetUp(rig);
         BonesAir(rig);
-        BonesClimb(rig);
+        BonesClimb(rig, dt, climbSpeedMetres, grip);
         BonesActivity(rig);
         BonesGesture(rig);
         BonesMood(rig);
@@ -322,15 +330,25 @@ public sealed partial class ModelAnimalPerformer
     {
         if (_drag > 0.001f)
         {
-            // Hanging limp at the back, front paws paddling, tail tucked.
-            rig.Add(Ch.TailLift, -0.7f * _drag);
-            rig.Add(Ch.TailTip, -0.3f * _drag);
-            rig.AddLeg(Ch.Swing0, 0, (-0.3f + 0.35f * MathF.Sin(_time * 7f)) * _drag);
-            rig.AddLeg(Ch.Swing0, 1, (-0.3f + 0.35f * MathF.Sin(_time * 7f + 2f)) * _drag);
-            rig.AddLeg(Ch.Swing0, 2, (0.2f + _dangle * 0.6f) * _drag);
-            rig.AddLeg(Ch.Swing0, 3, (0.2f + _dangle * 0.6f) * _drag);
-            rig.Add(Ch.HeadPitch, -0.2f * _drag);
+            // Lifted by the scruff (the whole model hangs from the neck, see PoseWhole): the
+            // head stays level, back slightly curled, all four legs hanging limp, the back
+            // ones tucked up a little, the tail hanging and curling under.
+            float sway = 0.1f * MathF.Sin(_time * 2.6f) + _dangle * 0.5f;
+            rig.Add(Ch.NeckPitch, 0.75f * _drag);
+            rig.Add(Ch.HeadPitch, 0.42f * _drag);
+            rig.Add(Ch.ChestPitch, 0.12f * _drag);
+            rig.Add(Ch.HipsPitch, 0.08f * _drag);
+            rig.AddLeg(Ch.Swing0, 0, (0.95f + sway) * _drag);
+            rig.AddLeg(Ch.Swing0, 1, (0.95f - sway) * _drag);
+            rig.AddLeg(Ch.Knee0, 0, 0.25f * _drag);
+            rig.AddLeg(Ch.Knee0, 1, 0.25f * _drag);
+            rig.AddLeg(Ch.Swing0, 2, (0.7f + sway) * _drag);
+            rig.AddLeg(Ch.Swing0, 3, (0.7f - sway) * _drag);
+            rig.AddLeg(Ch.Knee0, 2, 0.55f * _drag);
+            rig.AddLeg(Ch.Knee0, 3, 0.55f * _drag);
             rig.Add(Ch.TailRelax, _drag);
+            rig.Add(Ch.TailTip, 0.7f * _drag);
+            rig.Add(Ch.TailSway, 0.5f * sway * _drag);
         }
         if (_fall > 0.001f)
         {
@@ -400,29 +418,77 @@ public sealed partial class ModelAnimalPerformer
         }
     }
 
-    /// <summary>Going up a wall (the whole model is turned nose-up): looking up, tail hanging down.</summary>
-    private void BonesClimb(ModelAnimalRig rig)
+    /// <summary>
+    /// Going up a wall (the whole model is turned nose-up, the wall where the ground was):
+    /// hugging it, not standing off it. The front paws reach up in turn and hook in, the
+    /// back legs push together, so the body bunches up and stretches out with each heave;
+    /// the head looks up the wall, the tail hangs and swings for balance.
+    /// </summary>
+    private void BonesClimb(ModelAnimalRig rig, float dt, float climbSpeedMetres, ClimbGrip grip)
     {
         float w = _climb;
         if (w <= 0.001f)
             return;
-        rig.Add(Ch.HeadPitch, -0.35f * w);
+        float speed = grip == ClimbGrip.Slipping ? 0.9f : grip == ClimbGrip.Hanging ? 0f : MathF.Abs(climbSpeedMetres);
+        _climbGait = (_climbGait + dt * speed / ClimbStride) % 1f;
+        float sweep = ClimbStride * ClimbDuty / _size.Y;
+        for (int i = 0; i < 4; i++)
+        {
+            // Hanging, only the front paws still hold on; the back legs dangle.
+            float hold = i < 2 ? 1f : 1f - _hang;
+            rig.AddLeg(Ch.Plant0, i, hold * w);
+            float p = (_climbGait + ClimbOffsets[i]) % 1f;
+            float z, y = 0f;
+            if (p < ClimbDuty)
+            {
+                z = sweep * (0.5f - p / ClimbDuty);
+            }
+            else
+            {
+                float s = (p - ClimbDuty) / (1f - ClimbDuty);
+                z = sweep * (Smooth(s) - 0.5f);
+                y = 0.07f * MathF.Sin(MathF.PI * s);
+            }
+            // The front paws reach high, the back ones are drawn up under the body.
+            z += i < 2 ? 0.1f : 0.07f;
+            rig.AddLeg(Ch.FootZ0, i, z * hold * w);
+            rig.AddLeg(Ch.FootY0, i, y * hold * w);
+        }
+        float heave = MathF.Sin(_climbGait * Mathf.Tau * 2f);
+        float going = speed > 0.01f ? 1f : 0f;
+        // Close to the wall, the back arching and flattening.
+        rig.Add(Ch.HipsY, -0.19f * w);
+        rig.Add(Ch.HipsPitch, 0.1f * heave * going * w);
+        rig.Add(Ch.ChestPitch, (0.06f - 0.16f * heave * going) * w);
+        rig.Add(Ch.HipsZ, 0.025f * heave * going * w);
+        float rock = MathF.Sin(_climbGait * Mathf.Tau);
+        rig.Add(Ch.ChestRoll, 0.14f * rock * going * w);
+        rig.Add(Ch.HipsRoll, -0.09f * rock * going * w);
+        rig.Add(Ch.HipsYaw, 0.06f * rock * going * w);
+        rig.Add(Ch.ChestYaw, -0.1f * rock * going * w);
+        // The neck reaches along the wall, the head tipped back to look up it.
+        rig.Add(Ch.NeckPitch, 0.5f * w);
+        rig.Add(Ch.HeadPitch, -0.3f * w);
         rig.Add(Ch.TailRelax, w);
-        rig.Add(Ch.TailLift, -0.4f * w);
-        rig.Add(Ch.ChestPitch, 0.1f * MathF.Sin(_time * 6f) * w * (1f - _hang));
+        rig.Add(Ch.TailLift, -0.3f * w);
         rig.Add(Ch.TailWag, 0.3f * w);
-        rig.Add(Ch.TailSpeed, 2f * w);
+        rig.Add(Ch.TailSpeed, 2.2f * w);
         if (_slip > 0.001f)
         {
-            rig.AddLeg(Ch.Swing0, 0, -0.7f * _slip);
-            rig.AddLeg(Ch.Swing0, 1, -0.7f * _slip);
+            // Scrabbling, ears flat, sliding down.
+            rig.Add(Ch.HipsY, 0.04f * _slip);
+            rig.Add(Ch.TailRelax, -0.4f * _slip);
+            rig.Add(Ch.TailWag, 0.6f * _slip);
+            rig.Add(Ch.TailSpeed, 10f * _slip);
         }
         if (_hang > 0.001f)
         {
-            rig.AddLeg(Ch.Swing0, 0, -1.4f * _hang);
-            rig.AddLeg(Ch.Swing0, 1, -1.4f * _hang);
-            rig.AddLeg(Ch.Swing0, 2, 0.35f * MathF.Sin(_time * 3.4f) * _hang);
-            rig.AddLeg(Ch.Swing0, 3, -0.35f * MathF.Sin(_time * 3.4f) * _hang);
+            // Hanging by the front paws: the body swings out, back legs paddling for a hold.
+            float swing = MathF.Sin(_time * 3.4f);
+            rig.AddLeg(Ch.Swing0, 2, (1.1f + 0.3f * swing) * _hang);
+            rig.AddLeg(Ch.Swing0, 3, (1.1f - 0.3f * swing) * _hang);
+            rig.Add(Ch.HipsY, 0.05f * _hang);
+            rig.Add(Ch.TailSway, 0.5f * swing * _hang);
         }
     }
 
