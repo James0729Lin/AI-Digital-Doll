@@ -12,9 +12,9 @@ namespace DigitalDoll.Chat;
 /// (come, dance, sit…) and, for the doll, every pose from <see cref="PoseCatalog"/>
 /// grouped by kind; for an animal, its own activities (<see cref="ActivityCatalog"/>).
 /// Picking one hands its action id (as the chat commands use) to the caller. The items
-/// are filled in each time it opens, for whoever is on the desktop then.
+/// are filled in for whoever is on the desktop (see <see cref="Refresh"/>).
 /// </summary>
-public static class ActionMenu
+public sealed class ActionMenu
 {
     private static readonly (string Id, string Label)[] Body =
     {
@@ -29,30 +29,40 @@ public static class ActionMenu
         ("get_up", "BODY_GET_UP"), ("stretch", "BODY_STRETCH"),
     };
 
-    /// <summary>Builds the menu; <paramref name="tr"/> translates keys, <paramref name="picked"/> receives the action.</summary>
-    /// <param name="species">The animal shown when the menu opens, or null for the doll.</param>
-    public static PopupMenu Create(Func<string, string> tr, Action<string> picked, Func<Species?> species)
+    private readonly Func<string, string> _tr;
+    private readonly Action<string> _picked;
+    private readonly Func<Species?> _species;
+    private Species? _filledFor;
+
+    /// <param name="tr">Translates keys.</param>
+    /// <param name="picked">Receives the action.</param>
+    /// <param name="species">The animal on the desktop, or null for the doll.</param>
+    public ActionMenu(Func<string, string> tr, Action<string> picked, Func<Species?> species)
     {
-        var menu = new PopupMenu { Name = "Actions" };
-        Species? filledFor = null;
-        bool filled = false;
-        menu.AboutToPopup += () =>
-        {
-            var now = species();
-            if (filled && now == filledFor)
-                return;
-            filled = true;
-            filledFor = now;
-            Fill(menu, tr, picked, now);
-        };
-        Fill(menu, tr, picked, species());
-        filled = true;
-        filledFor = species();
-        return menu;
+        _tr = tr;
+        _picked = picked;
+        _species = species;
+        _filledFor = species();
+        Fill(_filledFor);
     }
 
-    private static void Fill(PopupMenu menu, Func<string, string> tr, Action<string> picked, Species? species)
+    public PopupMenu Menu { get; } = new() { Name = "Actions" };
+
+    /// <summary>Call before the menu (or the menu it hangs from) opens: the character may have changed.</summary>
+    public void Refresh()
     {
+        var now = _species();
+        if (now == _filledFor)
+            return;
+        _filledFor = now;
+        Fill(now);
+    }
+
+    private void Fill(Species? species)
+    {
+        var menu = Menu;
+        var tr = _tr;
+        var picked = _picked;
         menu.Clear();
         foreach (var child in menu.GetChildren())
         {

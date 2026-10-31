@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using DigitalDoll.Core.Acting;
 using DigitalDoll.Core.Mascot;
 using Godot;
@@ -7,10 +6,11 @@ using Godot;
 namespace DigitalDoll.Mascot;
 
 /// <summary>
-/// The move and rotate handles. Move: hold and drag, and on release she stays exactly
-/// there (in mid-air too). Rotate: hold and drag like a trackball - sideways turns her
+/// Moving and rotating, picked from the right-click menu; the next click (or Esc) ends
+/// them. Move: she follows the mouse, and stays exactly where she is put down (in
+/// mid-air too). Rotate: moving the mouse turns her like a trackball - sideways turns her
 /// round, up and down tips her head over heels about her middle - with some weight to
-/// her: she lags a little behind the mouse; let go, a turn carries on spinning until
+/// her: she lags a little behind the mouse; once done, a turn carries on spinning until
 /// friction stops it and a tip swings back upright like a weighted toy.
 /// </summary>
 public partial class MascotRoot
@@ -22,104 +22,41 @@ public partial class MascotRoot
         Rotate,
     }
 
-    /// <summary>How close (in character heights) the cursor brings the handles up.</summary>
-    private const float HandleReach = 0.35f;
-
-    private CharacterHandles? _handles;
     private Grip _grip;
-    private float _userYaw, _spinTarget, _spinVelocity, _handlesShown;
+    private float _userYaw, _spinTarget, _spinVelocity;
     private float _userPitch, _pitchTarget, _pitchVelocity;
     private Vector2 _gripCursor;
 
     /// <summary>Radians of turn per pixel dragged on the rotate handle.</summary>
     private const float TurnPerPixel = 0.012f;
 
-    private void CreateHandles()
+    /// <summary>Starts moving her with the mouse (picked from the menu), held by her middle.</summary>
+    private void StartMoving()
     {
-        var layer = new CanvasLayer { Layer = 10 };
-        AddChild(layer);
-        _handles = new CharacterHandles();
-        layer.AddChild(_handles);
-    }
-
-    /// <summary>Places the handles beside the head and fades them in while the cursor is near.</summary>
-    private void UpdateHandles(float dt)
-    {
-        if (_handles == null || _body == null)
+        var brain = _brain;
+        if (brain == null)
             return;
-        float scale = Mathf.Clamp(DisplayServer.ScreenGetDpi(GetWindow().CurrentScreen) / 96f, 1f, 3f);
-        float radius = 15f * scale;
-        var head = _camera.UnprojectPosition(_body.HeadPosition);
-        var move = head + new Vector2(_heightPixels * 0.3f, -radius * 0.5f);
-        // On the other side when that would leave the window.
-        if (move.X + radius * 2f > _windowSize.X)
-            move.X = head.X - _heightPixels * 0.3f;
-        move.X = Mathf.Clamp(move.X, radius + 2f, _windowSize.X - radius - 2f);
-        move.Y = Mathf.Clamp(move.Y, radius + 2f, _windowSize.Y - radius * 3.5f);
-        var rotate = move + new Vector2(0f, radius * 2.5f);
-        if (_grip == Grip.None)
-        {
-            _handles.MoveCentre = move;
-            _handles.RotateCentre = rotate;
-        }
-        _handles.Radius = radius;
-
-        var cursor = CursorInWindow();
-        int hot = _grip == Grip.Move ? 1 : _grip == Grip.Rotate ? 2 : HandleAt(cursor);
-        bool near = _grip != Grip.None || hot != 0 || NearCharacter(cursor, _heightPixels * HandleReach);
-        bool allowed = !_dragging || _grip == Grip.Move;
-        _handlesShown = Mathf.MoveToward(_handlesShown, near && allowed ? 1f : 0f, dt * (near ? 6f : 3f));
-        _handles.Shown = _handlesShown;
-        _handles.Hot = hot;
-        _handles.QueueRedraw();
+        _grip = Grip.Move;
+        _pressCursor = new Vector2(brain.X, brain.Y - _heightPixels * 0.5f);
+        StartDrag();
+        _chat?.Say(Tr("MENU_MOVE_HINT"));
     }
 
-    /// <summary>1 when the cursor is on the move handle, 2 on the rotate handle, 0 otherwise.</summary>
-    private int HandleAt(Vector2 cursor)
+    /// <summary>Starts turning her with the mouse (picked from the menu).</summary>
+    private void StartRotating()
     {
-        if (_handles == null || _handlesShown < 0.3f)
-            return 0;
-        float r = _handles.Radius * 1.15f;
-        if (cursor.DistanceTo(_handles.MoveCentre) <= r)
-            return 1;
-        if (cursor.DistanceTo(_handles.RotateCentre) <= r)
-            return 2;
-        return 0;
+        if (_brain == null)
+            return;
+        _grip = Grip.Rotate;
+        _gripCursor = CursorInWindow();
+        _spinTarget = _userYaw;
+        _pitchTarget = _userPitch;
+        _brain.Hold(1f);
+        _chat?.Say(Tr("MENU_ROTATE_HINT"));
     }
 
-    private bool NearCharacter(Vector2 cursor, float margin)
-    {
-        if (_tight.Length < 3)
-            return false;
-        float x0 = _tight.Min(p => p.X) - margin, x1 = _tight.Max(p => p.X) + margin;
-        float y0 = _tight.Min(p => p.Y) - margin, y1 = _tight.Max(p => p.Y) + margin;
-        return cursor.X >= x0 && cursor.X <= x1 && cursor.Y >= y0 && cursor.Y <= y1;
-    }
-
-    /// <summary>A press on a handle starts moving or rotating; returns whether it was one.</summary>
-    private bool PressHandle(Vector2 cursor)
-    {
-        switch (HandleAt(cursor))
-        {
-            case 1:
-                _grip = Grip.Move;
-                _pressCursor = cursor;
-                StartDrag();
-                return true;
-            case 2:
-                _grip = Grip.Rotate;
-                _gripCursor = cursor;
-                _spinTarget = _userYaw;
-                _pitchTarget = _userPitch;
-                _brain!.Hold(1f);
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /// <summary>Lets go of a handle; returns whether one was held.</summary>
-    private bool ReleaseHandle()
+    /// <summary>Ends moving or rotating; returns whether either was going on.</summary>
+    private bool FinishGrip()
     {
         switch (_grip)
         {
@@ -131,7 +68,7 @@ public partial class MascotRoot
                 _brain!.PinAt(_brain.X, _brain.Y);
                 return true;
             case Grip.Rotate:
-                // Let go while turning: it keeps spinning (see UpdateSpin).
+                // Done while turning: it keeps spinning (see UpdateSpin).
                 _grip = Grip.None;
                 _pressed = false;
                 return true;
@@ -141,9 +78,9 @@ public partial class MascotRoot
     }
 
     /// <summary>
-    /// The turn the user gave her. While the rotate handle is held she is pulled toward the
-    /// angle the mouse has swept round her by a spring (so she has some weight and lags a
-    /// little); let go, she spins on and slows down. Walking or climbing off, the turn is
+    /// The turn the user gave her. While rotating she is pulled toward the angle the mouse
+    /// has swept round her by a spring (so she has some weight and lags a little); once
+    /// done, she spins on and slows down. Walking or climbing off, the turn is
     /// eased away so she faces where she is going again.
     /// </summary>
     private void UpdateSpin(float dt)

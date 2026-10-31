@@ -106,14 +106,15 @@ public partial class ChatInput : Window
         _field.TextSubmitted += _ => Send();
         row.AddChild(_field);
         // Actions right next to the field: pick one instead of typing it.
-        var actionMenu = ActionMenu.Create(key => Tr(key), id => ActionPicked?.Invoke(id), () => Species());
-        AddChild(actionMenu);
+        var actionMenu = new ActionMenu(key => Tr(key), id => ActionPicked?.Invoke(id), () => Species());
+        AddChild(actionMenu.Menu);
         var actions = new Button { Text = Tr("CHAT_ACTIONS"), TooltipText = Tr("CHAT_ACTIONS_TIP") };
         actions.Pressed += () =>
         {
             var at = actions.GetScreenPosition() + new Vector2(0f, actions.Size.Y * ContentScaleFactor);
-            actionMenu.Position = (Vector2I)at;
-            actionMenu.Popup();
+            actionMenu.Refresh();
+            actionMenu.Menu.Position = (Vector2I)at;
+            actionMenu.Menu.Popup();
         };
         row.AddChild(actions);
         _send = new Button { Text = Tr("CHAT_SEND") };

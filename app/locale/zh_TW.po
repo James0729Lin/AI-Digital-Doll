@@ -180,6 +180,18 @@ msgstr "小豬"
 msgid "MENU_ACTIONS"
 msgstr "動作"
 
+msgid "MENU_MOVE"
+msgstr "移動位置"
+
+msgid "MENU_ROTATE"
+msgstr "旋轉"
+
+msgid "MENU_MOVE_HINT"
+msgstr "移動滑鼠帶我走，點一下放下（Esc 也可以）"
+
+msgid "MENU_ROTATE_HINT"
+msgstr "移動滑鼠轉我，點一下結束（Esc 也可以）"
+
 msgid "ACTION_GROUP_BODY"
 msgstr "全身動作"
 

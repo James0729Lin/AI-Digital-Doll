@@ -224,7 +224,7 @@ public sealed class ModelAnimalBody : IMascotBody
 }
 
 /// <summary>Plays a model animal's clips for each behaviour and fills the gaps by posing the whole model.</summary>
-public sealed class ModelAnimalPerformer : IPerformer
+public sealed partial class ModelAnimalPerformer : IPerformer
 {
     private const float WeightRate = 9f;
 
@@ -253,7 +253,7 @@ public sealed class ModelAnimalPerformer : IPerformer
     private readonly Node3D?[] _backLegs = new Node3D?[2];
     private readonly Dictionary<Node3D, (Transform3D Base, Transform3D Written)> _legs = new();
     private string? _activity, _poseId;
-    private float _act;
+    private float _act, _stepPhase;
 
     public ModelAnimalPerformer(Species species, Node3D root, Node3D body, AnimationPlayer? player, Vector3 size, Random random)
     {
@@ -263,6 +263,7 @@ public sealed class ModelAnimalPerformer : IPerformer
         _size = size;
         _random = random;
         _props = new ActivityProps(root.GetParent<Node3D>(), species, size.Y, size.Z);
+        _rig = ModelAnimalRig.TryCreate(body, root.GetParent<Node3D>());
         foreach (var node in body.FindChildren("*leg*", "Node3D", true, false).Cast<Node3D>())
         {
             string name = node.Name.ToString().ToLowerInvariant();
@@ -359,7 +360,10 @@ public sealed class ModelAnimalPerformer : IPerformer
             _lieSide = _random.Next(2) == 0 ? -1 : 1;
         _state = state;
         if (state != MascotState.Pose)
+        {
+            _fadingActivity = _activity ?? _fadingActivity;
             _activity = _poseId = null;
+        }
         _props.Update(dt, _activity, state);
         Ease(ref _act, _activity != null ? 1f : 0f, dt, 5f);
         _emotionHold -= dt;
@@ -389,12 +393,22 @@ public sealed class ModelAnimalPerformer : IPerformer
         _dangleVelocity += (push - _dangle * 40f - _dangleVelocity * 5f) * dt;
         _dangle = Mathf.Clamp(_dangle + _dangleVelocity * dt, -0.9f, 0.9f);
         _lookYaw = Mathf.Lerp(_lookYaw, Mathf.Clamp(LookYaw, -0.6f, 0.6f), 1f - MathF.Exp(-6f * dt));
+        _lookPitch = Mathf.Lerp(_lookPitch, Mathf.Clamp(LookPitch, -0.4f, 0.4f), 1f - MathF.Exp(-6f * dt));
+        Ease(ref _walk, state == MascotState.Walk ? 1f : 0f, dt, 7f);
+        Ease(ref _run, running && state == MascotState.Walk ? 1f : 0f, dt, 5f);
 
         var (clip, speed) = _activity != null ? ActivityClip(_activity) : ChooseClip(state, speedMetres, climbSpeedMetres, running, grip);
+        _rig?.Reset();
         PlayClip(clip, speed);
         _player?.Advance(dt);
+        // Where the walk clip is in its stride, for what rocks along with the steps.
+        if (_player != null && _player.IsPlaying() && clip == "walk")
+            _stepPhase = Mathf.Tau * (float)(_player.CurrentAnimationPosition / Math.Max(_player.CurrentAnimationLength, 0.01));
         PoseWhole();
-        PoseLegs();
+        if (_rig != null)
+            PoseBones(dt);
+        else
+            PoseLegs();
     }
 
     /// <summary>Munching in the eat clip; otherwise idling, with the legs and body posed over it.</summary>
@@ -469,11 +483,13 @@ public sealed class ModelAnimalPerformer : IPerformer
     {
         if (_gesture != null && GestureClip(_gesture.Gesture) is string g && _clips.ContainsKey(g))
             return (g, 1f);
-        float stride = 0.3f;
+        // Metres the body goes per second at the clip's own speed, so the paws do not slide:
+        // the low-poly models' walk (measured from its footfalls) is much shorter-striding.
+        float stride = _rig != null ? 0.12f : 0.3f;
         return state switch
         {
             MascotState.Walk when running && _clips.ContainsKey("run") => ("run", Mathf.Clamp(MathF.Abs(speedMetres) / (stride * 2.2f), 0.7f, 2f)),
-            MascotState.Walk => ("walk", Mathf.Clamp(MathF.Abs(speedMetres) / stride, 0.6f, 2.2f)),
+            MascotState.Walk => ("walk", Mathf.Clamp(MathF.Abs(speedMetres) / stride, 0.6f, _rig != null ? 3.4f : 2.2f)),
             // Climbing paws along to its heaves; scrabbling when slipping; still when hanging.
             MascotState.Climb when grip == ClimbGrip.Slipping => (_clips.ContainsKey("run") ? "run" : "walk", 2.6f),
             MascotState.Climb when grip == ClimbGrip.Hanging => ("idle", 0.6f),
@@ -549,15 +565,19 @@ public sealed class ModelAnimalPerformer : IPerformer
         // Lying down: settled on its belly, squashed low with a slight lean to one side
         // (rolling the whole model onto its side sank it through the floor on the way);
         // or flat on its face after a long fall.
-        roll += _lieSide * 0.18f * _lie;
-        squash += -0.28f * _lie;
+        if (_rig == null)
+        {
+            roll += _lieSide * 0.18f * _lie;
+            squash += -0.28f * _lie;
+        }
         pitch += MathF.PI / 2f * 0.85f * _sprawl;
         offset.Y += depth * 0.35f * _sprawl;
         // Sitting back on its rump; dazed on its bottom after a hard landing.
-        pitch += -0.35f * _sit - 0.6f * _tumble;
+        pitch += (_rig == null ? -0.35f * _sit : 0f) - 0.6f * _tumble;
         roll += 0.25f * MathF.Sin(_time * 9f) * MathF.Exp(-_stateTime * 1.2f) * _tumble;
         // Getting back up: a wobble.
-        roll += 0.15f * MathF.Sin(_time * 10f) * _getUp;
+        if (_rig == null)
+            roll += 0.15f * MathF.Sin(_time * 10f) * _getUp;
 
         // Carried: dangling and swinging with the motion; falling: spinning a little,
         // legs pedalling (the run clip); hopping down on purpose: leaning into it.
@@ -568,7 +588,7 @@ public sealed class ModelAnimalPerformer : IPerformer
         pitch += 0.25f * _jump;
 
         // Landing and talking squash and stretch; petting wiggles; moods.
-        squash += -0.18f * _land;
+        squash += (_rig == null ? -0.18f : -0.05f) * _land;
         if (Talking)
             squash += 0.04f * MathF.Sin(_time * 14f);
         if (Petted)
@@ -582,7 +602,8 @@ public sealed class ModelAnimalPerformer : IPerformer
             Emotion.Surprised => 0.08f * MathF.Exp(-MathF.Max(0f, 4f - _emotionHold) * 3f),
             _ => 0f,
         };
-        yaw += 0.5f * _lookYaw * (1f - MathF.Max(_climb, MathF.Max(_lie, _sprawl)));
+        if (_rig == null)
+            yaw += 0.5f * _lookYaw * (1f - MathF.Max(_climb, MathF.Max(_lie, _sprawl)));
         PoseActivity(ref pitch, ref roll, ref yaw, ref offset, ref squash);
 
         _root.Transform = new Transform3D(Basis.FromEuler(new Vector3(pitch, yaw, roll), EulerOrder.Yxz), offset);
@@ -596,6 +617,9 @@ public sealed class ModelAnimalPerformer : IPerformer
         if (w <= 0.001f || _activity == null)
             return;
         float t = _props.Time, h = _size.Y;
+        // Only the roll is left to the whole model where the bones do the rest.
+        if (_rig != null && _activity != "roll")
+            return;
         switch (_activity)
         {
             case "eat":
