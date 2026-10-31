@@ -180,6 +180,18 @@ msgstr "Pig"
 msgid "MENU_ACTIONS"
 msgstr "Actions"
 
+msgid "MENU_MOVE"
+msgstr "Move"
+
+msgid "MENU_ROTATE"
+msgstr "Rotate"
+
+msgid "MENU_MOVE_HINT"
+msgstr "Move the mouse to carry me; click to put me down (or Esc)"
+
+msgid "MENU_ROTATE_HINT"
+msgstr "Move the mouse to turn me; click to finish (or Esc)"
+
 msgid "ACTION_GROUP_BODY"
 msgstr "Whole body"
 

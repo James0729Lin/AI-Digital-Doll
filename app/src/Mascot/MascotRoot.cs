@@ -47,6 +47,8 @@ public partial class MascotRoot : Node3D
     private const int MenuStay = 6;
     private const int MenuChat = 7;
     private const int MenuAiSettings = 8;
+    private const int MenuMove = 9;
+    private const int MenuRotate = 10;
 
     /// <summary>
     /// The body editor and the edited body are hidden for now (the code is kept, and
@@ -95,6 +97,7 @@ public partial class MascotRoot : Node3D
 
     private Snapshot? _snapshot;
     private ChatController? _chat;
+    private Chat.ActionMenu? _actions;
 
     // The --creator argument opens the editor once at start-up, not on every return.
     private static bool _creatorRequested;
@@ -127,7 +130,6 @@ public partial class MascotRoot : Node3D
 
         BuildMenu();
         if (_snapshot == null)
-            CreateHandles();
         GetNode<StatusIndicator>("Tray").Pressed += OnTrayPressed;
         _fileDialog.FileSelected += path => LoadCharacter(path, persist: true);
         GetWindow().FilesDropped += files =>
@@ -215,7 +217,6 @@ public partial class MascotRoot : Node3D
 
         if (_snapshot == null)
         {
-            UpdateHandles(dt);
             UpdateHitRegion();
             bool calm = _brain.State == MascotState.Idle && !_dragging;
             Engine.MaxFps = calm ? 30 : 60;
@@ -231,6 +232,17 @@ public partial class MascotRoot : Node3D
         if (_brain == null || _snapshot != null)
             return;
 
+        // Moving or rotating (from the menu): the next click or Esc ends it.
+        if (_grip != Grip.None)
+        {
+            if (@event is InputEventMouseButton { Pressed: true } or InputEventKey { Pressed: true, Keycode: Key.Escape })
+            {
+                FinishGrip();
+                GetViewport().SetInputAsHandled();
+            }
+            return;
+        }
+
         if (@event is InputEventMouseButton button)
         {
             if (button.ButtonIndex == MouseButton.Left && button.Pressed && button.DoubleClick)
@@ -242,12 +254,6 @@ public partial class MascotRoot : Node3D
             }
             else if (button.ButtonIndex == MouseButton.Left && button.Pressed)
             {
-                // The move and rotate handles first.
-                if (PressHandle(CursorInWindow()))
-                {
-                    _pressed = true;
-                    return;
-                }
                 // Picked up only once the cursor moves or the button is held; a quick
                 // click is a poke.
                 _pressed = true;
@@ -256,8 +262,6 @@ public partial class MascotRoot : Node3D
             }
             else if (button.ButtonIndex == MouseButton.Left && !button.Pressed)
             {
-                if (ReleaseHandle())
-                    return;
                 if (_dragging)
                 {
                     _dragging = false;
@@ -735,7 +739,7 @@ public partial class MascotRoot : Node3D
         // Windows: take the mouse while it is over the character (or holding it), let it
         // through everywhere else; the window keeps its full shape, so nothing flickers.
         var cursor = CursorInWindow();
-        bool over = _dragging || _pressed || _grip != Grip.None || HandleAt(cursor) != 0
+        bool over = _dragging || _pressed || _grip != Grip.None
             || (_tight.Length >= 3 && Geometry2D.IsPointInPolygon(cursor, _tight));
         if (_clickThrough != !over && WindowsNative.SetClickThrough(DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle), !over))
             _clickThrough = !over;
@@ -769,13 +773,16 @@ public partial class MascotRoot : Node3D
         _menu.Clear();
         _menu.AddItem(Tr("MENU_CHAT"), MenuChat);
         _menu.AddItem(Tr("MENU_AI_SETTINGS"), MenuAiSettings);
-        _menu.AddSubmenuNodeItem(Tr("MENU_ACTIONS"), Chat.ActionMenu.Create(key => Tr(key), PerformCommand, () => AnimalSpecies));
+        _actions = new Chat.ActionMenu(key => Tr(key), PerformCommand, () => AnimalSpecies);
+        _menu.AddSubmenuNodeItem(Tr("MENU_ACTIONS"), _actions.Menu);
         _menu.AddSeparator();
         if (BodyEditorEnabled)
         {
             _menu.AddItem(Tr("MENU_BODY_EDITOR"), MenuCreator);
             _menu.AddSeparator();
         }
+        _menu.AddItem(Tr("MENU_MOVE"), MenuMove);
+        _menu.AddItem(Tr("MENU_ROTATE"), MenuRotate);
         _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
         _menu.AddCheckItem(Tr("MENU_STAY"), MenuStay);
         if (BodyEditorEnabled)
@@ -815,6 +822,8 @@ public partial class MascotRoot : Node3D
 
     private void ShowMenu(Vector2I screenPosition)
     {
+        // Whoever is on the desktop now: an animal's own actions, or the doll's poses.
+        _actions?.Refresh();
         _menu.Position = screenPosition;
         _menu.Popup();
     }
@@ -825,6 +834,12 @@ public partial class MascotRoot : Node3D
         {
             case MenuCallOver:
                 _brain?.WalkTo(CursorInWindow().X);
+                break;
+            case MenuMove:
+                StartMoving();
+                break;
+            case MenuRotate:
+                StartRotating();
                 break;
             case MenuLoad:
                 _fileDialog.Popup();
