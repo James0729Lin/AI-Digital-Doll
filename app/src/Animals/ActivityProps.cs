@@ -33,8 +33,10 @@ public sealed class ActivityProps
     /// <param name="parent">The node turned with the animal (props stay in front of it).</param>
     /// <param name="height">The animal's height, which every prop is sized by.</param>
     /// <param name="length">Nose to tail, to put props just in front of the nose.</param>
-    public ActivityProps(Node3D parent, Species species, float height, float length)
+    /// <param name="front">How far ahead of the middle the prop goes, if not just in front of the nose.</param>
+    public ActivityProps(Node3D parent, Species species, float height, float length, float? front = null)
     {
+        Front = front ?? length * 0.5f + height * 0.28f;
         _species = species;
         _height = height;
         _length = length;
@@ -68,7 +70,7 @@ public sealed class ActivityProps
     public float FoodLeft { get; private set; } = 1f;
 
     /// <summary>Where the prop sits (in front of the nose).</summary>
-    public float Front => _length * 0.5f + _height * 0.28f;
+    public float Front { get; }
 
     /// <param name="activity">The activity being done, or null.</param>
     /// <param name="sleeping">Lying down asleep: the "Zzz" rises over it.</param>
@@ -360,7 +362,7 @@ public sealed class ActivityProps
     {
         float l = _height * 0.34f, r = _height * 0.035f;
         // Held between the front paws as it lies.
-        var root = new Node3D { Position = new Vector3(0f, r, _length * 0.5f + l * 0.25f), Rotation = new Vector3(0f, 1.2f, 0f) };
+        var root = new Node3D { Position = new Vector3(0f, r, Front + l * 0.1f - _height * 0.2f), Rotation = new Vector3(0f, 1.2f, 0f) };
         var bone = Material(new Color(0.97f, 0.94f, 0.85f));
         root.AddChild(new MeshInstance3D
         {

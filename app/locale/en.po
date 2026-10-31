@@ -195,6 +195,9 @@ msgstr "Chest and paws"
 msgid "COAT_ACCENT"
 msgstr "Ears and nose"
 
+msgid "COAT_EYE"
+msgstr "Eyes"
+
 msgid "COAT_PATTERN"
 msgstr "Pattern"
 

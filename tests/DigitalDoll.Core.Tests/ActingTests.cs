@@ -354,8 +354,9 @@ public class ActingTests
         Assert.Equal(AnimalCoat.Default(Species.Cat), loaded.Coat(Species.Cat, AnimalStyle.LowPoly));
 
         // A hand-edited file cannot break it.
-        var bad = new AnimalCoat { Main = "red", PatternSize = 5f, PatternAmount = float.NaN, Pattern = (CoatPattern)99 }.Checked(Species.Cat);
+        var bad = new AnimalCoat { Main = "red", Eye = "", PatternSize = 5f, PatternAmount = float.NaN, Pattern = (CoatPattern)99 }.Checked(Species.Cat);
         Assert.Equal(AnimalCoat.Default(Species.Cat).Main, bad.Main);
+        Assert.Equal(AnimalCoat.Default(Species.Cat).Eye, bad.Eye);
         Assert.Equal(1f, bad.PatternSize);
         Assert.Equal(AnimalCoat.Default(Species.Cat).PatternAmount, bad.PatternAmount);
         Assert.Equal(CoatPattern.None, bad.Pattern);

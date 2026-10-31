@@ -15,7 +15,7 @@ public partial class CoatEditor : Window
     private AnimalCoat _coat = new();
     private bool _filling;
     private HFlowContainer _presets = null!;
-    private ColorPickerButton _main = null!, _second = null!, _accent = null!, _patternColor = null!;
+    private ColorPickerButton _main = null!, _second = null!, _accent = null!, _eye = null!, _patternColor = null!;
     private Control _secondRow = null!, _accentRow = null!, _patternRows = null!;
     private OptionButton _pattern = null!;
     private HSlider _size = null!, _amount = null!;
@@ -49,6 +49,7 @@ public partial class CoatEditor : Window
         _main = Colour(column, "COAT_MAIN", out _);
         _second = Colour(column, "COAT_SECOND", out _secondRow);
         _accent = Colour(column, "COAT_ACCENT", out _accentRow);
+        _eye = Colour(column, "COAT_EYE", out _);
         column.AddChild(new HSeparator());
 
         _pattern = new OptionButton { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -120,6 +121,7 @@ public partial class CoatEditor : Window
         _main.Color = new Color(coat.Main);
         _second.Color = new Color(coat.Second);
         _accent.Color = new Color(coat.Accent);
+        _eye.Color = new Color(coat.Eye);
         _patternColor.Color = new Color(coat.PatternColor);
         _pattern.Selected = _pattern.GetItemIndex((int)coat.Pattern);
         _size.Value = coat.PatternSize;
@@ -140,6 +142,7 @@ public partial class CoatEditor : Window
             Main = Hex(_main.Color),
             Second = Hex(_second.Color),
             Accent = Hex(_accent.Color),
+            Eye = Hex(_eye.Color),
             Pattern = pattern,
             PatternColor = Hex(_patternColor.Color),
             PatternSize = (float)_size.Value,

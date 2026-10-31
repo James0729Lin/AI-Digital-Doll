@@ -22,7 +22,8 @@ public sealed class ModelAnimalBody : IMascotBody
     /// colours for materials by name (the low-poly pack's files keep the material names
     /// but not their colours).
     /// </summary>
-    private sealed record Spec(string Path, float Scale = 1f, float Turn = 0f, Dictionary<string, CoatPart>? Parts = null);
+    /// <param name="Eye">For a model without eyes: the left eye from the head bone in the model's own units, its half width, its pupil's width and its turn outward.</param>
+    private sealed record Spec(string Path, float Scale = 1f, float Turn = 0f, Dictionary<string, CoatPart>? Parts = null, (Vector3 At, float Radius, float Pupil, float Turn)? Eye = null);
 
     /// <summary>Which of a coat's colours a material of the model shows.</summary>
     private enum CoatPart
@@ -45,11 +46,11 @@ public sealed class ModelAnimalBody : IMascotBody
             ["grey"] = CoatPart.Main,
             ["white"] = CoatPart.Second,
             ["pink"] = CoatPart.Accent,
-        }),
+        }, Eye: (new Vector3(0.27f, 0.12f, 0.84f), 0.14f, 0.26f, 0.5f)),
         [(Species.Dog, AnimalStyle.LowPoly)] = new("res://assets/animals/lowpoly/Dog.fbx", Turn: -Mathf.Pi / 2f, Parts: new()
         {
             ["dog"] = CoatPart.Main,
-        }),
+        }, Eye: (new Vector3(0.34f, 0.2f, 0.48f), 0.13f, 0.72f, 0.5f)),
     };
 
     /// <summary>Height of every model animal in metres (about the classic animals' size).</summary>
@@ -98,6 +99,8 @@ public sealed class ModelAnimalBody : IMascotBody
         var animal = new ModelAnimalBody(species, model, root, body, player, new Aabb(new Vector3(-size.X / 2f, 0f, -size.Z / 2f), size), random);
         if (spec.Parts != null)
             animal.PrepareCoat(instance, spec.Parts);
+        if (spec.Eye is var (at, radius, pupil, turn))
+            animal._performer.AddEyes(at * scale, radius * scale, pupil, turn);
         return animal;
     }
 
@@ -126,6 +129,7 @@ public sealed class ModelAnimalBody : IMascotBody
             material.SetShaderParameter("pattern_size", coat.PatternSize);
             material.SetShaderParameter("pattern_amount", coat.PatternAmount);
         }
+        _performer.SetEyeColour(new Color(coat.Eye));
     }
 
     /// <summary>
@@ -369,7 +373,9 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         _player = player;
         _size = size;
         _random = random;
-        _props = new ActivityProps(root.GetParent<Node3D>(), species, size.Y, size.Z);
+        // Close enough for the head to reach down into the bowl (the low-poly models have long
+        // necks and short muzzles; the blocky ones a big head over their paws).
+        _props = new ActivityProps(root.GetParent<Node3D>(), species, size.Y, size.Z, body.FindChildren("*", "Skeleton3D", true, false).Count > 0 ? size.Y * 0.44f : size.Z * 0.5f + size.Y * 0.12f);
         _rig = ModelAnimalRig.TryCreate(body, root.GetParent<Node3D>(), species == Species.Dog ? 0.45f : 1f);
         foreach (var node in body.FindChildren("*leg*", "Node3D", true, false).Cast<Node3D>())
         {
@@ -463,7 +469,7 @@ public sealed partial class ModelAnimalPerformer : IPerformer
     {
         _time += dt;
         _stateTime = state == _state ? _stateTime + dt : 0f;
-        if (state == MascotState.Lie && _state != MascotState.Lie)
+        if (state is MascotState.Lie or MascotState.Falling && _state != state)
             _lieSide = _random.Next(2) == 0 ? -1 : 1;
         _state = state;
         if (state != MascotState.Pose)
@@ -509,7 +515,7 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         _rig?.Reset();
         PlayClip(clip, speed);
         _player?.Advance(dt);
-        PoseWhole();
+        PoseWhole(state);
         if (_rig != null)
             PoseBones(dt, speedMetres);
         else
@@ -652,7 +658,7 @@ public sealed partial class ModelAnimalPerformer : IPerformer
     }
 
     /// <summary>Whole-model poses for what the clips cannot show.</summary>
-    private void PoseWhole()
+    private void PoseWhole(MascotState state)
     {
         float h = _size.Y, depth = _size.Z, width = _size.X;
         float pitch = 0f, roll = 0f, yaw = 0f;
@@ -677,11 +683,17 @@ public sealed partial class ModelAnimalPerformer : IPerformer
             roll += _lieSide * 0.18f * _lie;
             squash += -0.28f * _lie;
         }
-        pitch += MathF.PI / 2f * 0.85f * _sprawl;
-        offset.Y += depth * 0.35f * _sprawl;
+        if (_rig == null)
+        {
+            pitch += MathF.PI / 2f * 0.85f * _sprawl;
+            offset.Y += depth * 0.35f * _sprawl;
+        }
         // Sitting back on its rump; dazed on its bottom after a hard landing.
-        pitch += (_rig == null ? -0.35f * _sit : 0f) - 0.6f * _tumble;
-        roll += 0.25f * MathF.Sin(_time * 9f) * MathF.Exp(-_stateTime * 1.2f) * _tumble;
+        if (_rig == null)
+        {
+            pitch += -0.35f * _sit - 0.6f * _tumble;
+            roll += 0.25f * MathF.Sin(_time * 9f) * MathF.Exp(-_stateTime * 1.2f) * _tumble;
+        }
         // Getting back up: a wobble.
         if (_rig == null)
             roll += 0.15f * MathF.Sin(_time * 10f) * _getUp;
@@ -689,9 +701,21 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         // Carried: dangling and swinging with the motion; falling: spinning a little,
         // legs pedalling (the run clip); hopping down on purpose: leaning into it.
         roll += _dangle * _drag;
-        pitch += (0.25f + 0.1f * MathF.Sin(_time * 4f)) * _drag;
-        pitch += 0.3f * _fall;
-        roll += 0.25f * MathF.Sin(_time * 7f) * _fall;
+        if (_rig == null)
+        {
+            pitch += (0.25f + 0.1f * MathF.Sin(_time * 4f)) * _drag;
+            pitch += 0.3f * _fall;
+            roll += 0.25f * MathF.Sin(_time * 7f) * _fall;
+        }
+        else
+        {
+            // Held by the scruff the nose points up. Thrown, it starts off turned over and
+            // rights itself in the air, as cats do, well before it lands.
+            pitch += (-0.55f + 0.06f * MathF.Sin(_time * 4f)) * _drag;
+            float twist = state == MascotState.Falling ? MathF.Exp(-_stateTime * 4.5f) : 0f;
+            roll += _lieSide * 2.6f * twist * _fall;
+            pitch += -0.5f * twist * _fall;
+        }
         pitch += 0.25f * _jump;
 
         // Landing and talking squash and stretch; petting wiggles; moods.
@@ -730,7 +754,7 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         switch (_activity)
         {
             case "eat":
-                pitch += (_props.FoodLeft > 0f ? 0.18f : 0f) * w;
+                pitch += (_props.FoodLeft > 0f ? 0.32f : 0f) * w;
                 break;
             case "yarn":
             case "ball":

@@ -104,7 +104,7 @@ public sealed class ModelAnimalRig
                 UpperAngle = Angle(Side(knee) - Side(joint)),
                 LowerAngle = Angle(Side(ankle) - Side(knee)),
                 // Elbows point back, knees forward.
-                Bend = front ? -1f : 1f,
+                Bend = front ? 1f : -1f,
                 Front = front,
             };
             ordered[(front ? 0 : 2) + (joint.X > 0f ? 0 : 1)] = leg;
@@ -143,6 +143,20 @@ public sealed class ModelAnimalRig
         for (var parent = skeleton.GetParent() as Node3D; parent != null && parent != space; parent = parent.GetParent() as Node3D)
             toSpace = parent.Transform * toSpace;
         return new ModelAnimalRig(skeleton, toSpace, spine, tail, new[] { a, b, c, d }, tailDepth);
+    }
+
+    /// <summary>A node that follows the head, in metres in the character's axes, its origin at the head bone.</summary>
+    public Node3D AttachToHead()
+    {
+        var attachment = new BoneAttachment3D { Name = "Head", BoneName = _skeleton.GetBoneName(_head) };
+        _skeleton.AddChild(attachment);
+        var head = new Node3D { Name = "HeadSpace" };
+        // The bone's rest pose undone, down to the character's scale and axes.
+        var rest = _skeleton.GetBoneGlobalRest(_head);
+        var inCharacter = new Transform3D(_toCharacter, Vector3.Zero) * rest;
+        head.Transform = new Transform3D(inCharacter.Basis.Inverse(), Vector3.Zero);
+        attachment.AddChild(head);
+        return head;
     }
 
     /// <summary>Starts a frame: nothing asked for yet.</summary>
