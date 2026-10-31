@@ -31,6 +31,43 @@ public sealed partial class ModelAnimalPerformer
     private float _tailMood = 0.9f, _tailMoodTimer = 8f, _nextFlick = 3f, _flick;
     private float _lastYaw, _turnBend;
     private string? _fadingActivity;
+    private ModelAnimalEyes? _eyes;
+    private float _nextBlink = 2f, _blink;
+
+    /// <summary>Gives a model without eyes a pair (see <see cref="ModelAnimalEyes"/>).</summary>
+    public void AddEyes(Vector3 at, float radius, float pupilWidth, float turn)
+    {
+        if (_rig != null)
+            _eyes = new ModelAnimalEyes(_rig.AttachToHead(), at, radius, pupilWidth, turn);
+    }
+
+    public void SetEyeColour(Color colour) => _eyes?.SetColour(colour);
+
+    /// <summary>Blinks now and then; narrowed when content, shut in sleep, wide when startled or at play.</summary>
+    private void PoseEyes(float dt)
+    {
+        if (_eyes == null)
+            return;
+        _nextBlink -= dt;
+        if (_nextBlink <= 0f)
+        {
+            _nextBlink = 2.5f + 4.5f * (float)_random.NextDouble();
+            // Now and then twice in a row.
+            _blink = _random.Next(4) == 0 ? 0.42f : 0.14f;
+        }
+        _blink = MathF.Max(0f, _blink - dt);
+        bool closing = _blink > 0f && (_blink < 0.14f || _blink > 0.28f);
+        float content = Petted || _emotion == Emotion.Happy ? 0.5f : _emotion == Emotion.Relaxed ? 0.35f : _emotion is Emotion.Sad or Emotion.Worried ? 0.25f : 0f;
+        string? activity = _activity;
+        if (activity is "eat" or "bone")
+            content = MathF.Max(content, 0.45f);
+        if (activity == "wash_face")
+            content = 0.85f;
+        float open = (1f - content) * (1f - MathF.Max(_lie, _sprawl * 0.6f));
+        bool play = activity is "yarn" or "ball";
+        bool startled = _emotion == Emotion.Surprised || _gesture?.Gesture == Gesture.Startle || _fall > 0.5f;
+        _eyes.Pose(dt, closing ? 0f : open, startled ? 1f : play ? 0.4f : 0f, startled || play ? 1f : 0f);
+    }
 
     private void PoseBones(float dt, float speedMetres)
     {
@@ -53,6 +90,7 @@ public sealed partial class ModelAnimalPerformer
         BonesMood(rig);
         BonesLook(rig);
         rig.Apply(dt, _size.Y);
+        PoseEyes(dt);
     }
 
     /// <summary>How much it has its paws on the ground.</summary>
@@ -296,14 +334,21 @@ public sealed partial class ModelAnimalPerformer
         }
         if (_fall > 0.001f)
         {
-            rig.AddLeg(Ch.Swing0, 0, -0.7f * _fall);
-            rig.AddLeg(Ch.Swing0, 1, -0.7f * _fall);
-            rig.AddLeg(Ch.Swing0, 2, 0.6f * _fall);
-            rig.AddLeg(Ch.Swing0, 3, 0.6f * _fall);
-            rig.Add(Ch.TailRelax, 0.2f * _fall);
+            // Righting itself: the front half turns before the back, then all four legs
+            // reach down for the ground, back arched, the tail swinging round for balance.
+            float twist = MathF.Exp(-_stateTime * 4.5f);
+            rig.Add(Ch.ChestRoll, -_lieSide * 0.9f * twist * _fall);
+            rig.Add(Ch.HipsRoll, _lieSide * 0.4f * twist * _fall);
+            rig.Add(Ch.TailSway, _lieSide * 1.5f * twist * _fall);
+            rig.AddLeg(Ch.Swing0, 0, (-0.3f + 0.1f * MathF.Sin(_time * 9f)) * _fall);
+            rig.AddLeg(Ch.Swing0, 1, (-0.3f + 0.1f * MathF.Sin(_time * 9f + 1.5f)) * _fall);
+            rig.AddLeg(Ch.Swing0, 2, (0.25f + 0.1f * MathF.Sin(_time * 9f + 3f)) * _fall);
+            rig.AddLeg(Ch.Swing0, 3, (0.25f + 0.1f * MathF.Sin(_time * 9f + 4.5f)) * _fall);
+            rig.Add(Ch.ChestPitch, -0.12f * _fall);
+            rig.Add(Ch.HeadPitch, 0.25f * _fall);
+            rig.Add(Ch.TailRelax, 0.45f * _fall);
             rig.Add(Ch.TailWag, 0.5f * _fall);
             rig.Add(Ch.TailSpeed, 6f * _fall);
-            rig.Add(Ch.HeadPitch, -0.2f * _fall);
         }
         if (_jump > 0.001f)
         {
@@ -316,24 +361,42 @@ public sealed partial class ModelAnimalPerformer
         }
         if (_land > 0.001f)
         {
+            // Absorbing the drop: chest low first, the legs folding like springs.
             rig.AddLegs(Ch.Plant0, _land);
-            rig.Add(Ch.HipsY, -0.12f * _land);
-            rig.Add(Ch.ChestPitch, 0.12f * _land);
-            rig.Add(Ch.HeadPitch, -0.15f * _land);
+            rig.Add(Ch.HipsY, -0.14f * _land);
+            rig.Add(Ch.ChestPitch, 0.14f * _land);
+            rig.Add(Ch.NeckPitch, -0.1f * _land);
+            rig.Add(Ch.TailLift, 0.3f * _land);
         }
         if (_tumble > 0.001f)
         {
+            // A hard landing: still on its feet but squashed low, legs splayed, head swimming.
             float wobble = MathF.Exp(-_stateTime * 1.2f);
+            rig.AddLegs(Ch.Plant0, 2f * _tumble);
+            rig.Add(Ch.HipsY, -0.17f * _tumble);
+            rig.AddLeg(Ch.FootZ0, 0, 0.1f * _tumble);
+            rig.AddLeg(Ch.FootZ0, 1, 0.1f * _tumble);
+            rig.AddLeg(Ch.FootZ0, 2, -0.04f * _tumble);
+            rig.AddLeg(Ch.FootZ0, 3, -0.04f * _tumble);
+            rig.Add(Ch.ChestRoll, 0.12f * MathF.Sin(_time * 5f) * wobble * _tumble);
             rig.Add(Ch.HeadRoll, 0.45f * MathF.Sin(_time * 7f) * wobble * _tumble);
             rig.Add(Ch.NeckYaw, 0.25f * MathF.Sin(_time * 5f) * wobble * _tumble);
+            rig.Add(Ch.NeckPitch, 0.2f * _tumble);
+            rig.Add(Ch.TailRelax, _tumble);
         }
         if (_sprawl > 0.001f)
         {
-            rig.AddLeg(Ch.Swing0, 0, -1.2f * _sprawl);
-            rig.AddLeg(Ch.Swing0, 1, -1.2f * _sprawl);
-            rig.AddLeg(Ch.Swing0, 2, 1.2f * _sprawl);
-            rig.AddLeg(Ch.Swing0, 3, 1.2f * _sprawl);
+            // Flat on its belly, legs out in front and behind, chin on the floor; a feeble kick after a moment.
+            float kick = MathF.Max(0f, MathF.Sin(_stateTime * 8f)) * Smooth(Mathf.Clamp((_stateTime - 0.9f) / 0.4f, 0f, 1f)) * MathF.Exp(-MathF.Max(0f, _stateTime - 1.5f) * 2f);
+            rig.Add(Ch.HipsY, -0.23f * _sprawl);
+            rig.AddLeg(Ch.Swing0, 0, -1.25f * _sprawl);
+            rig.AddLeg(Ch.Swing0, 1, -1.25f * _sprawl);
+            rig.AddLeg(Ch.Swing0, 2, 1.25f * _sprawl);
+            rig.AddLeg(Ch.Swing0, 3, (1.25f - 0.5f * kick) * _sprawl);
+            rig.Add(Ch.NeckPitch, 0.5f * _sprawl);
+            rig.Add(Ch.HeadPitch, 0.15f * _sprawl);
             rig.Add(Ch.TailRelax, _sprawl);
+            rig.Add(Ch.TailLift, -0.3f * _sprawl);
         }
     }
 
@@ -377,11 +440,12 @@ public sealed partial class ModelAnimalPerformer
                 float eating = _props.FoodLeft > 0f ? 1f : 0.15f;
                 float chew = MathF.Max(0f, MathF.Sin(t * 10f));
                 rig.AddLegs(Ch.Plant0, w);
-                rig.Add(Ch.HipsPitch, 0.1f * w);
-                rig.Add(Ch.ChestPitch, 0.22f * eating * w);
-                rig.Add(Ch.HipsY, -0.03f * w);
-                rig.Add(Ch.NeckPitch, (0.55f * eating - 0.05f) * w);
-                rig.Add(Ch.HeadPitch, (0.3f * eating + 0.07f * chew * eating) * w);
+                // Shoulders dropped between the front legs, the muzzle down at the food.
+                rig.Add(Ch.HipsPitch, 0.08f * w);
+                rig.Add(Ch.ChestPitch, 0.2f * eating * w);
+                rig.Add(Ch.HipsY, -0.02f * w);
+                rig.Add(Ch.NeckPitch, (0.42f * eating - 0.05f) * w);
+                rig.Add(Ch.HeadPitch, (0.06f * eating + 0.09f * chew * eating) * w);
                 rig.Add(Ch.HeadRoll, 0.06f * MathF.Sin(t * 2.3f) * w);
                 rig.Add(Ch.TailWag, 0.15f * w);
                 break;

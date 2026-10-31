@@ -195,6 +195,9 @@ msgstr "胸口與腳掌"
 msgid "COAT_ACCENT"
 msgstr "耳朵與鼻子"
 
+msgid "COAT_EYE"
+msgstr "眼睛"
+
 msgid "COAT_PATTERN"
 msgstr "花紋"
 
