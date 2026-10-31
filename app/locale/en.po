@@ -180,6 +180,51 @@ msgstr "Pig"
 msgid "MENU_ACTIONS"
 msgstr "Actions"
 
+msgid "MENU_APPEARANCE"
+msgstr "Appearance"
+
+msgid "COAT_TITLE"
+msgstr "Appearance"
+
+msgid "COAT_MAIN"
+msgstr "Coat"
+
+msgid "COAT_SECOND"
+msgstr "Chest and paws"
+
+msgid "COAT_ACCENT"
+msgstr "Ears and nose"
+
+msgid "COAT_PATTERN"
+msgstr "Pattern"
+
+msgid "COAT_PATTERN_NONE"
+msgstr "None"
+
+msgid "COAT_PATTERN_SPOTS"
+msgstr "Spots"
+
+msgid "COAT_PATTERN_STRIPES"
+msgstr "Tabby stripes"
+
+msgid "COAT_PATTERN_PATCHES"
+msgstr "Patches"
+
+msgid "COAT_PATTERN_COLOR"
+msgstr "Pattern colour"
+
+msgid "COAT_PATTERN_SIZE"
+msgstr "Pattern size"
+
+msgid "COAT_PATTERN_AMOUNT"
+msgstr "Pattern amount"
+
+msgid "COAT_RESET"
+msgstr "Reset"
+
+msgid "COAT_DONE"
+msgstr "Done"
+
 msgid "MENU_MOVE"
 msgstr "Move"
 

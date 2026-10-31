@@ -22,7 +22,15 @@ public sealed class ModelAnimalBody : IMascotBody
     /// colours for materials by name (the low-poly pack's files keep the material names
     /// but not their colours).
     /// </summary>
-    private sealed record Spec(string Path, float Scale = 1f, float Turn = 0f, Dictionary<string, Color>? Colours = null);
+    private sealed record Spec(string Path, float Scale = 1f, float Turn = 0f, Dictionary<string, CoatPart>? Parts = null);
+
+    /// <summary>Which of a coat's colours a material of the model shows.</summary>
+    private enum CoatPart
+    {
+        Main,
+        Second,
+        Accent,
+    }
 
     private static readonly Dictionary<(Species, AnimalStyle), Spec> Specs = new()
     {
@@ -30,16 +38,17 @@ public sealed class ModelAnimalBody : IMascotBody
         [(Species.Dog, AnimalStyle.Cube)] = new("res://assets/animals/cube/animal-dog.glb"),
         [(Species.Chicken, AnimalStyle.Cube)] = new("res://assets/animals/cube/animal-chick.glb"),
         [(Species.Pig, AnimalStyle.Cube)] = new("res://assets/animals/cube/animal-pig.glb"),
-        // A black cat with a white chest and paws and pink ears, a grey dog, as in the pack's preview.
-        [(Species.Cat, AnimalStyle.LowPoly)] = new("res://assets/animals/lowpoly/Cat.fbx", Turn: -Mathf.Pi / 2f, Colours: new()
+        // A black cat with a white chest and paws and pink ears, a grey dog, as in the pack's
+        // preview (see AnimalCoat.Default); both can be recoloured.
+        [(Species.Cat, AnimalStyle.LowPoly)] = new("res://assets/animals/lowpoly/Cat.fbx", Turn: -Mathf.Pi / 2f, Parts: new()
         {
-            ["grey"] = new Color(0.22f, 0.22f, 0.25f),
-            ["pink"] = new Color(0.96f, 0.62f, 0.74f),
-            ["white"] = new Color(0.96f, 0.95f, 0.93f),
+            ["grey"] = CoatPart.Main,
+            ["white"] = CoatPart.Second,
+            ["pink"] = CoatPart.Accent,
         }),
-        [(Species.Dog, AnimalStyle.LowPoly)] = new("res://assets/animals/lowpoly/Dog.fbx", Turn: -Mathf.Pi / 2f, Colours: new()
+        [(Species.Dog, AnimalStyle.LowPoly)] = new("res://assets/animals/lowpoly/Dog.fbx", Turn: -Mathf.Pi / 2f, Parts: new()
         {
-            ["dog"] = new Color(0.55f, 0.54f, 0.52f),
+            ["dog"] = CoatPart.Main,
         }),
     };
 
@@ -50,6 +59,7 @@ public sealed class ModelAnimalBody : IMascotBody
     private readonly Node3D _model;
     private readonly List<MeshInstance3D> _meshes;
     private readonly List<Vector2> _points = new();
+    private readonly List<(CoatPart Part, ShaderMaterial Material)> _coatMaterials = new();
 
     private ModelAnimalBody(Species species, Node3D model, Node3D root, Node3D body, AnimationPlayer? player, Aabb box, Random random)
     {
@@ -75,9 +85,6 @@ public sealed class ModelAnimalBody : IMascotBody
         root.AddChild(body);
         body.AddChild(instance);
 
-        if (spec.Colours != null)
-            Recolour(instance, spec.Colours);
-
         // Normalise: face +Z, feet on the ground, centred, TargetHeight tall.
         instance.Rotation = new Vector3(0f, spec.Turn, 0f);
         var box = Measure(instance);
@@ -88,7 +95,123 @@ public sealed class ModelAnimalBody : IMascotBody
         var size = box.Size * scale;
 
         var player = instance.FindChildren("*", "AnimationPlayer", true, false).Cast<AnimationPlayer>().FirstOrDefault();
-        return new ModelAnimalBody(species, model, root, body, player, new Aabb(new Vector3(-size.X / 2f, 0f, -size.Z / 2f), size), random);
+        var animal = new ModelAnimalBody(species, model, root, body, player, new Aabb(new Vector3(-size.X / 2f, 0f, -size.Z / 2f), size), random);
+        if (spec.Parts != null)
+            animal.PrepareCoat(instance, spec.Parts);
+        return animal;
+    }
+
+    /// <summary>Whether this animal can be recoloured.</summary>
+    public bool HasCoat => _coatMaterials.Count > 0;
+
+    /// <summary>Whether the model has a second colour (chest, belly) and an accent (ears, nose).</summary>
+    public bool HasSecondColour => _coatMaterials.Any(m => m.Part == CoatPart.Second);
+    public bool HasAccentColour => _coatMaterials.Any(m => m.Part == CoatPart.Accent);
+
+    /// <summary>Shows this coat (at once, also while the model is on the desktop).</summary>
+    public void ApplyCoat(AnimalCoat coat)
+    {
+        foreach (var (part, material) in _coatMaterials)
+        {
+            string colour = part switch
+            {
+                CoatPart.Second => coat.Second,
+                CoatPart.Accent => coat.Accent,
+                _ => coat.Main,
+            };
+            material.SetShaderParameter("base_color", new Color(colour));
+            // The pattern is on the main colour only: the white chest stays white.
+            material.SetShaderParameter("pattern", part == CoatPart.Main ? (int)coat.Pattern : 0);
+            material.SetShaderParameter("pattern_color", new Color(coat.PatternColor));
+            material.SetShaderParameter("pattern_size", coat.PatternSize);
+            material.SetShaderParameter("pattern_amount", coat.PatternAmount);
+        }
+    }
+
+    /// <summary>
+    /// Gives each surface the coat shader, and each vertex its place on the resting body
+    /// (the model has no UVs of its own), so a pattern stays put on the fur as it moves.
+    /// </summary>
+    private void PrepareCoat(Node3D instance, Dictionary<string, CoatPart> parts)
+    {
+        var shader = GD.Load<Shader>("res://assets/shaders/animal_coat.gdshader");
+        foreach (var mesh in instance.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>())
+        {
+            if (mesh.Mesh is not ArrayMesh source)
+                continue;
+            var baked = new ArrayMesh();
+            var skeleton = mesh.Skin != null ? mesh.GetNodeOrNull<Skeleton3D>(mesh.Skeleton) : null;
+            for (int surface = 0; surface < source.GetSurfaceCount(); surface++)
+            {
+                var arrays = source.SurfaceGetArrays(surface);
+                var rest = RestPoints(mesh, skeleton, arrays, instance);
+                var uv = new Vector2[rest.Length];
+                var uv2 = new Vector2[rest.Length];
+                // In units of the animal's height, whatever its size.
+                float scale = 1f / Mathf.Max(Size.Y, 0.001f);
+                for (int v = 0; v < rest.Length; v++)
+                {
+                    var at = rest[v] * scale;
+                    uv[v] = new Vector2(at.X, at.Y);
+                    uv2[v] = new Vector2(at.Z, 0f);
+                }
+                arrays[(int)Mesh.ArrayType.TexUV] = uv;
+                arrays[(int)Mesh.ArrayType.TexUV2] = uv2;
+                var flags = source.SurfaceGetFormat(surface) & Mesh.ArrayFormat.FlagUse8BoneWeights;
+                baked.AddSurfaceFromArrays(source.SurfaceGetPrimitiveType(surface), arrays, null, null, flags);
+
+                string name = (source.SurfaceGetMaterial(surface)?.ResourceName ?? "").ToLowerInvariant();
+                var part = parts.Where(p => name.Contains(p.Key)).Select(p => (CoatPart?)p.Value).FirstOrDefault() ?? CoatPart.Main;
+                var material = new ShaderMaterial { Shader = shader };
+                baked.SurfaceSetMaterial(surface, material);
+                _coatMaterials.Add((part, material));
+            }
+            mesh.Mesh = baked;
+        }
+        ApplyCoat(AnimalCoat.Default(Species));
+    }
+
+    /// <summary>A surface's vertices on the resting body, in the instance's parent space.</summary>
+    private static Vector3[] RestPoints(MeshInstance3D mesh, Skeleton3D? skeleton, Godot.Collections.Array arrays, Node3D root)
+    {
+        var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+        var rest = new Vector3[vertices.Length];
+        var skin = mesh.Skin;
+        if (skin == null || skeleton == null)
+        {
+            var toRoot = ToRoot(mesh, root);
+            for (int v = 0; v < vertices.Length; v++)
+                rest[v] = toRoot * vertices[v];
+            return rest;
+        }
+        var toParent = ToRoot(skeleton, root);
+        var binds = new Transform3D[skin.GetBindCount()];
+        for (int b = 0; b < binds.Length; b++)
+        {
+            int bone = skin.GetBindBone(b);
+            if (bone < 0)
+                bone = skeleton.FindBone(skin.GetBindName(b));
+            binds[b] = toParent * (bone >= 0 ? skeleton.GetBoneGlobalRest(bone) : Transform3D.Identity) * skin.GetBindPose(b);
+        }
+        var bones = arrays[(int)Mesh.ArrayType.Bones].AsInt32Array();
+        var weights = arrays[(int)Mesh.ArrayType.Weights].AsFloat32Array();
+        int per = vertices.Length > 0 ? bones.Length / vertices.Length : 0;
+        for (int v = 0; v < vertices.Length; v++)
+        {
+            var at = Vector3.Zero;
+            float total = 0f;
+            for (int k = 0; k < per; k++)
+            {
+                float w = weights[v * per + k];
+                int bind = bones[v * per + k];
+                if (w <= 0f || bind < 0 || bind >= binds.Length)
+                    continue;
+                at += binds[bind] * vertices[v] * w;
+                total += w;
+            }
+            rest[v] = total > 0f ? at / total : vertices[v];
+        }
+        return rest;
     }
 
     public Species Species { get; }
@@ -138,22 +261,6 @@ public sealed class ModelAnimalBody : IMascotBody
         for (int i = 0; i < 8; i++)
             _points.Add(camera.UnprojectPosition(_performer.Body.ToGlobal(box.GetEndpoint(i))));
         return CharacterHitShape.Grow(Geometry2D.ConvexHull(_points.ToArray()), margin);
-    }
-
-    private static void Recolour(Node3D root, Dictionary<string, Color> colours)
-    {
-        foreach (var mesh in root.FindChildren("*", "MeshInstance3D", true, false).Cast<MeshInstance3D>())
-        {
-            for (int i = 0; i < mesh.GetSurfaceOverrideMaterialCount(); i++)
-            {
-                string name = (mesh.Mesh?.SurfaceGetMaterial(i)?.ResourceName ?? "").ToLowerInvariant();
-                foreach (var (key, colour) in colours)
-                {
-                    if (name.Contains(key))
-                        mesh.SetSurfaceOverrideMaterial(i, new StandardMaterial3D { AlbedoColor = colour, Roughness = 1f });
-                }
-            }
-        }
     }
 
     /// <summary>
@@ -253,7 +360,7 @@ public sealed partial class ModelAnimalPerformer : IPerformer
     private readonly Node3D?[] _backLegs = new Node3D?[2];
     private readonly Dictionary<Node3D, (Transform3D Base, Transform3D Written)> _legs = new();
     private string? _activity, _poseId;
-    private float _act, _stepPhase;
+    private float _act;
 
     public ModelAnimalPerformer(Species species, Node3D root, Node3D body, AnimationPlayer? player, Vector3 size, Random random)
     {
@@ -263,7 +370,7 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         _size = size;
         _random = random;
         _props = new ActivityProps(root.GetParent<Node3D>(), species, size.Y, size.Z);
-        _rig = ModelAnimalRig.TryCreate(body, root.GetParent<Node3D>());
+        _rig = ModelAnimalRig.TryCreate(body, root.GetParent<Node3D>(), species == Species.Dog ? 0.45f : 1f);
         foreach (var node in body.FindChildren("*leg*", "Node3D", true, false).Cast<Node3D>())
         {
             string name = node.Name.ToString().ToLowerInvariant();
@@ -396,17 +503,15 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         _lookPitch = Mathf.Lerp(_lookPitch, Mathf.Clamp(LookPitch, -0.4f, 0.4f), 1f - MathF.Exp(-6f * dt));
         Ease(ref _walk, state == MascotState.Walk ? 1f : 0f, dt, 7f);
         Ease(ref _run, running && state == MascotState.Walk ? 1f : 0f, dt, 5f);
+        Ease(ref _dance, state == MascotState.Dance ? 1f : 0f, dt, 6f);
 
         var (clip, speed) = _activity != null ? ActivityClip(_activity) : ChooseClip(state, speedMetres, climbSpeedMetres, running, grip);
         _rig?.Reset();
         PlayClip(clip, speed);
         _player?.Advance(dt);
-        // Where the walk clip is in its stride, for what rocks along with the steps.
-        if (_player != null && _player.IsPlaying() && clip == "walk")
-            _stepPhase = Mathf.Tau * (float)(_player.CurrentAnimationPosition / Math.Max(_player.CurrentAnimationLength, 0.01));
         PoseWhole();
         if (_rig != null)
-            PoseBones(dt);
+            PoseBones(dt, speedMetres);
         else
             PoseLegs();
     }
@@ -483,13 +588,15 @@ public sealed partial class ModelAnimalPerformer : IPerformer
     {
         if (_gesture != null && GestureClip(_gesture.Gesture) is string g && _clips.ContainsKey(g))
             return (g, 1f);
-        // Metres the body goes per second at the clip's own speed, so the paws do not slide:
-        // the low-poly models' walk (measured from its footfalls) is much shorter-striding.
+        // Bones do the walking, falling and being carried; only climbing still paws along
+        // with the clip (metres climbed per second at its own speed, from its footfalls).
+        if (_rig != null && state != MascotState.Climb)
+            return ("idle", 1f);
         float stride = _rig != null ? 0.12f : 0.3f;
         return state switch
         {
             MascotState.Walk when running && _clips.ContainsKey("run") => ("run", Mathf.Clamp(MathF.Abs(speedMetres) / (stride * 2.2f), 0.7f, 2f)),
-            MascotState.Walk => ("walk", Mathf.Clamp(MathF.Abs(speedMetres) / stride, 0.6f, _rig != null ? 3.4f : 2.2f)),
+            MascotState.Walk => ("walk", Mathf.Clamp(MathF.Abs(speedMetres) / stride, 0.6f, 2.2f)),
             // Climbing paws along to its heaves; scrabbling when slipping; still when hanging.
             MascotState.Climb when grip == ClimbGrip.Slipping => (_clips.ContainsKey("run") ? "run" : "walk", 2.6f),
             MascotState.Climb when grip == ClimbGrip.Hanging => ("idle", 0.6f),

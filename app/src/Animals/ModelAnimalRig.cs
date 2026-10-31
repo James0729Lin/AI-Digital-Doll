@@ -20,10 +20,15 @@ public sealed class ModelAnimalRig
         NeckPitch, NeckYaw,
         HeadPitch, HeadYaw, HeadRoll,
         TailLift, TailSway, TailWag, TailSpeed,
+
+        // How far the tail lies down from the model's upright rest (1 low and relaxed, 0
+        // straight up); its tip curling up or over; a quick flick of the tip.
+        TailRelax, TailTip, TailFlick,
         // Each of these four: front-left, front-right, back-left, back-right.
         Plant0, Plant1, Plant2, Plant3,
         FootY0, FootY1, FootY2, FootY3,
         FootZ0, FootZ1, FootZ2, FootZ3,
+        Flex0, Flex1, Flex2, Flex3,
         Swing0, Swing1, Swing2, Swing3,
         Count,
     }
@@ -51,9 +56,16 @@ public sealed class ModelAnimalRig
     private readonly float[] _now = new float[(int)Channel.Count];
     private float _tailPhase;
 
-    private ModelAnimalRig(Skeleton3D skeleton, Transform3D toCharacter, int[] spine, int[] tail, int[][] legs)
+    // Low and relaxed: down from the root, nearly level, the tip curving up again.
+    private static readonly float[] TailRelaxed = { -1.35f, -0.35f, 0.15f, 0.5f };
+    private readonly float _tailDepth;
+    private readonly float[] _tailPitch = new float[4], _tailYaw = new float[4];
+    private readonly float[] _tailPitchSpeed = new float[4], _tailYawSpeed = new float[4];
+
+    private ModelAnimalRig(Skeleton3D skeleton, Transform3D toCharacter, int[] spine, int[] tail, int[][] legs, float tailDepth)
     {
         _skeleton = skeleton;
+        _tailDepth = tailDepth;
         _toCharacter = toCharacter.Basis;
         (_hips, _chest, _neck, _head) = (spine[0], spine[1], spine[2], spine[3]);
         _tail = tail;
@@ -103,7 +115,8 @@ public sealed class ModelAnimalRig
     }
 
     /// <summary>The rig for a model with this skeleton's bones, or null when it has others.</summary>
-    public static ModelAnimalRig? TryCreate(Node3D model, Node3D space)
+    /// <param name="tailDepth">How much of the relaxed shape applies (a dog's tail rests lower than a cat's).</param>
+    public static ModelAnimalRig? TryCreate(Node3D model, Node3D space, float tailDepth = 1f)
     {
         if (model.FindChildren("*", "Skeleton3D", true, false) is not { Count: > 0 } found || found[0] is not Skeleton3D skeleton)
             return null;
@@ -129,7 +142,7 @@ public sealed class ModelAnimalRig
         var toSpace = skeleton.Transform;
         for (var parent = skeleton.GetParent() as Node3D; parent != null && parent != space; parent = parent.GetParent() as Node3D)
             toSpace = parent.Transform * toSpace;
-        return new ModelAnimalRig(skeleton, toSpace, spine, tail, new[] { a, b, c, d });
+        return new ModelAnimalRig(skeleton, toSpace, spine, tail, new[] { a, b, c, d }, tailDepth);
     }
 
     /// <summary>Starts a frame: nothing asked for yet.</summary>
@@ -165,8 +178,10 @@ public sealed class ModelAnimalRig
     public void Apply(float dt, float height)
     {
         float k = 1f - MathF.Exp(-14f * dt);
+        // The paws follow their paths closely; everything else eases into place.
+        float quick = 1f - MathF.Exp(-40f * dt);
         for (int i = 0; i < _now.Length; i++)
-            _now[i] += (_target[i] - _now[i]) * k;
+            _now[i] += (_target[i] - _now[i]) * (i >= (int)Channel.FootY0 && i <= (int)Channel.Flex3 ? quick : k);
 
         float hipsPitch = Now(Channel.HipsPitch), chestPitch = Now(Channel.ChestPitch);
         var move = new Vector3(0f, Now(Channel.HipsY), Now(Channel.HipsZ)) * height;
@@ -176,14 +191,7 @@ public sealed class ModelAnimalRig
         Turn(_neck, Now(Channel.NeckPitch), Now(Channel.NeckYaw), 0f);
         Turn(_head, Now(Channel.HeadPitch), Now(Channel.HeadYaw), Now(Channel.HeadRoll));
 
-        // The tail: a wave running down it, each segment a little behind the one before.
-        _tailPhase = (_tailPhase + dt * Now(Channel.TailSpeed)) % Mathf.Tau;
-        for (int i = 0; i < _tail.Length; i++)
-        {
-            float along = (i + 1f) / _tail.Length;
-            float sway = Now(Channel.TailSway) + Now(Channel.TailWag) * MathF.Sin(_tailPhase - i * 0.75f) * along;
-            Turn(_tail[i], Now(Channel.TailLift) / _tail.Length, sway / _tail.Length * 1.6f, 0f);
-        }
+        PoseTail(dt);
 
         // Where each hip or shoulder has gone, side view: (height, ahead).
         var hips = _hipsAt + new Vector2(move.Y, move.Z);
@@ -199,6 +207,34 @@ public sealed class ModelAnimalRig
 
     private float Now(Channel channel) => _now[(int)channel];
 
+    /// <summary>
+    /// A wave runs down the tail; each segment follows its target on a spring, softer toward
+    /// the tip, so the tail trails behind the body and overshoots a little when it stops.
+    /// </summary>
+    private void PoseTail(float dt)
+    {
+        _tailPhase = (_tailPhase + dt * Now(Channel.TailSpeed)) % Mathf.Tau;
+        float relax = Mathf.Clamp(Now(Channel.TailRelax), 0f, 1.2f);
+        float step = MathF.Min(dt, 1f / 30f);
+        for (int i = 0; i < _tail.Length; i++)
+        {
+            float along = (i + 1f) / _tail.Length;
+            float pitch = relax * TailRelaxed[i] * _tailDepth + Now(Channel.TailLift) / _tail.Length;
+            if (i >= _tail.Length - 2)
+                pitch += Now(Channel.TailTip) * (i == _tail.Length - 1 ? 0.7f : 0.3f);
+            float yaw = (Now(Channel.TailSway) + Now(Channel.TailWag) * MathF.Sin(_tailPhase - i * 0.75f) * along * along) / _tail.Length * 1.6f;
+            if (i >= _tail.Length - 2)
+                yaw += Now(Channel.TailFlick);
+            float stiffness = 70f - 12f * i;
+            float damping = 1.25f * MathF.Sqrt(stiffness);
+            _tailPitchSpeed[i] += ((pitch - _tailPitch[i]) * stiffness - _tailPitchSpeed[i] * damping) * step;
+            _tailYawSpeed[i] += ((yaw - _tailYaw[i]) * stiffness - _tailYawSpeed[i] * damping) * step;
+            _tailPitch[i] += _tailPitchSpeed[i] * step;
+            _tailYaw[i] += _tailYawSpeed[i] * step;
+            Turn(_tail[i], _tailPitch[i], _tailYaw[i], 0f);
+        }
+    }
+
     private void PoseLeg(Leg leg, Vector2 joint, float parent, int index, float height)
     {
         float plant = Mathf.Clamp(_now[(int)Channel.Plant0 + index], 0f, 1f);
@@ -212,8 +248,8 @@ public sealed class ModelAnimalRig
             float dLower = Mathf.AngleDifference(leg.LowerAngle, lower);
             Blend(leg.Upper, dUpper - parent, plant);
             Blend(leg.Lower, dLower - dUpper, plant);
-            // The paw stays level with the ground.
-            Blend(leg.Paw, -dLower, plant);
+            // The paw stays level with the ground, or hangs from the wrist when lifted.
+            Blend(leg.Paw, -dLower + _now[(int)Channel.Flex0 + index], plant);
         }
         if (MathF.Abs(swing) > 0.0001f)
             Turn(leg.Upper, swing, 0f, 0f);
