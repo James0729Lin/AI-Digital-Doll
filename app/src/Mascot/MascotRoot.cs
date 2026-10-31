@@ -749,6 +749,10 @@ public partial class MascotRoot : Node3D
         if (dt > 0f)
             _dragVelocity = _dragVelocity.Lerp((cursor - _lastCursor) / dt, 1f - MathF.Exp(-12f * dt));
         _lastCursor = cursor;
+        // An animal is held by the scruff, wherever it was grabbed: it slides under the hand
+        // so the neck is at the cursor, and its body hangs from there.
+        if (AnimalSpecies != null && _body != null)
+            _grabOffset += (_camera.UnprojectPosition(_body.NeckPosition) - cursor) * (1f - MathF.Exp(-14f * dt));
         var feet = cursor - _grabOffset;
         _brain!.DragTo(feet.X, Mathf.Min(feet.Y, _windowSize.Y - 1f));
     }

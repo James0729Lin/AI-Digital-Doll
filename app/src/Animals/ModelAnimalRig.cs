@@ -30,6 +30,9 @@ public sealed class ModelAnimalRig
         FootZ0, FootZ1, FootZ2, FootZ3,
         Flex0, Flex1, Flex2, Flex3,
         Swing0, Swing1, Swing2, Swing3,
+
+        // A free leg's lower part drawn up, for hanging limp or tucked.
+        Knee0, Knee1, Knee2, Knee3,
         Count,
     }
 
@@ -144,6 +147,9 @@ public sealed class ModelAnimalRig
             toSpace = parent.Transform * toSpace;
         return new ModelAnimalRig(skeleton, toSpace, spine, tail, new[] { a, b, c, d }, tailDepth);
     }
+
+    /// <summary>The scruff: where the neck joins the shoulders, in the world.</summary>
+    public Vector3 NeckWorld => _skeleton.GlobalTransform * _skeleton.GetBoneGlobalPose(_neck).Origin;
 
     /// <summary>A node that follows the head, in metres in the character's axes, its origin at the head bone.</summary>
     public Node3D AttachToHead()
@@ -267,6 +273,9 @@ public sealed class ModelAnimalRig
         }
         if (MathF.Abs(swing) > 0.0001f)
             Turn(leg.Upper, swing, 0f, 0f);
+        float knee = _now[(int)Channel.Knee0 + index];
+        if (MathF.Abs(knee) > 0.0001f)
+            Turn(leg.Lower, leg.Front ? knee : -knee, 0f, 0f);
     }
 
     /// <summary>The two bones' directions that bring the ankle to the foot's place, bending the natural way.</summary>

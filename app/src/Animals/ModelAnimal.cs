@@ -22,8 +22,8 @@ public sealed class ModelAnimalBody : IMascotBody
     /// colours for materials by name (the low-poly pack's files keep the material names
     /// but not their colours).
     /// </summary>
-    /// <param name="Eye">For a model without eyes: the left eye from the head bone in the model's own units, its half width, its pupil's width and its turn outward.</param>
-    private sealed record Spec(string Path, float Scale = 1f, float Turn = 0f, Dictionary<string, CoatPart>? Parts = null, (Vector3 At, float Radius, float Pupil, float Turn)? Eye = null);
+    /// <param name="Eye">For a model without eyes: their place and shape from the head bone, in the model's own units.</param>
+    private sealed record Spec(string Path, float Scale = 1f, float Turn = 0f, Dictionary<string, CoatPart>? Parts = null, ModelAnimalEyes.Shape? Eye = null);
 
     /// <summary>Which of a coat's colours a material of the model shows.</summary>
     private enum CoatPart
@@ -46,11 +46,11 @@ public sealed class ModelAnimalBody : IMascotBody
             ["grey"] = CoatPart.Main,
             ["white"] = CoatPart.Second,
             ["pink"] = CoatPart.Accent,
-        }, Eye: (new Vector3(0.27f, 0.12f, 0.84f), 0.14f, 0.26f, 0.5f)),
+        }, Eye: new(new Vector3(0.27f, 0.13f, 0.83f), 0f, 0.15f, 0.085f, 0.022f, 0.5f, 0.3f, 0.3f, true)),
         [(Species.Dog, AnimalStyle.LowPoly)] = new("res://assets/animals/lowpoly/Dog.fbx", Turn: -Mathf.Pi / 2f, Parts: new()
         {
             ["dog"] = CoatPart.Main,
-        }, Eye: (new Vector3(0.34f, 0.2f, 0.48f), 0.13f, 0.72f, 0.5f)),
+        }, Eye: new(new Vector3(0.3f, 0.1f, 0.7f), 0.02f, 0.11f, 0.1f, 0.07f, 0.35f, 0.1f, 0f, false)),
     };
 
     /// <summary>Height of every model animal in metres (about the classic animals' size).</summary>
@@ -99,8 +99,15 @@ public sealed class ModelAnimalBody : IMascotBody
         var animal = new ModelAnimalBody(species, model, root, body, player, new Aabb(new Vector3(-size.X / 2f, 0f, -size.Z / 2f), size), random);
         if (spec.Parts != null)
             animal.PrepareCoat(instance, spec.Parts);
-        if (spec.Eye is var (at, radius, pupil, turn))
-            animal._performer.AddEyes(at * scale, radius * scale, pupil, turn);
+        if (spec.Eye is { } eye)
+            animal._performer.AddEyes(eye with
+            {
+                At = eye.At * scale,
+                CentreX = eye.CentreX * scale,
+                Width = eye.Width * scale,
+                Height = eye.Height * scale,
+                PupilWidth = eye.PupilWidth * scale,
+            });
         return animal;
     }
 
@@ -230,7 +237,7 @@ public sealed class ModelAnimalBody : IMascotBody
 
     // The models have no head bone to speak of: the top front of the body stands in.
     public Vector3 HeadPosition => _performer.Body.ToGlobal(new Vector3(0f, Size.Y * 0.85f, Size.Z * 0.25f));
-    public Vector3 NeckPosition => _performer.Body.ToGlobal(new Vector3(0f, Size.Y * 0.55f, Size.Z * 0.25f));
+    public Vector3 NeckPosition => _performer.Neck ?? _performer.Body.ToGlobal(new Vector3(0f, Size.Y * 0.55f, Size.Z * 0.25f));
 
     public void LookAt(Vector3 target)
     {
@@ -517,7 +524,7 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         _player?.Advance(dt);
         PoseWhole(state);
         if (_rig != null)
-            PoseBones(dt, speedMetres);
+            PoseBones(dt, speedMetres, climbSpeedMetres, grip);
         else
             PoseLegs();
     }
@@ -594,11 +601,10 @@ public sealed partial class ModelAnimalPerformer : IPerformer
     {
         if (_gesture != null && GestureClip(_gesture.Gesture) is string g && _clips.ContainsKey(g))
             return (g, 1f);
-        // Bones do the walking, falling and being carried; only climbing still paws along
-        // with the clip (metres climbed per second at its own speed, from its footfalls).
-        if (_rig != null && state != MascotState.Climb)
+        // Bones do everything but the small movements of standing.
+        if (_rig != null)
             return ("idle", 1f);
-        float stride = _rig != null ? 0.12f : 0.3f;
+        float stride = 0.3f;
         return state switch
         {
             MascotState.Walk when running && _clips.ContainsKey("run") => ("run", Mathf.Clamp(MathF.Abs(speedMetres) / (stride * 2.2f), 0.7f, 2f)),
@@ -666,11 +672,12 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         float squash = 0f;
 
         // Climbing: nose up, belly to the wall; heaving makes it rock side to side, a slip
-        // shakes it, hanging lets it swing.
+        // shakes it, hanging lets it swing. The bones keep the paws on the wall themselves.
         pitch += -MathF.PI / 2f * _climb;
-        offset.Z += depth * 0.5f * _climb;
-        offset.Y += depth * 0.15f * _climb;
-        roll += 0.1f * MathF.Sin(_time * 6f) * _climb * (1f - _slip - _hang);
+        offset.Z += (_rig != null ? h * 0.1f : depth * 0.5f) * _climb;
+        offset.Y += depth * (_rig != null ? 0.3f : 0.15f) * _climb;
+        if (_rig == null)
+            roll += 0.1f * MathF.Sin(_time * 6f) * _climb * (1f - _slip - _hang);
         roll += 0.14f * MathF.Sin(_time * 30f) * _slip;
         pitch += 0.15f * _slip;
         roll += 0.15f * MathF.Sin(_time * 3.4f) * _hang;
@@ -709,9 +716,9 @@ public sealed partial class ModelAnimalPerformer : IPerformer
         }
         else
         {
-            // Held by the scruff the nose points up. Thrown, it starts off turned over and
-            // rights itself in the air, as cats do, well before it lands.
-            pitch += (-0.55f + 0.06f * MathF.Sin(_time * 4f)) * _drag;
+            // Held by the scruff it hangs nearly straight down from the neck. Thrown, it
+            // starts off turned over and rights itself in the air, as cats do, before it lands.
+            pitch += (-1.2f + 0.04f * MathF.Sin(_time * 2.6f)) * _drag;
             float twist = state == MascotState.Falling ? MathF.Exp(-_stateTime * 4.5f) : 0f;
             roll += _lieSide * 2.6f * twist * _fall;
             pitch += -0.5f * twist * _fall;
