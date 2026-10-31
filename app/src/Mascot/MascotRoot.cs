@@ -58,6 +58,13 @@ public partial class MascotRoot : Node3D
     /// </summary>
     private static readonly bool BodyEditorEnabled = false;
 
+    /// <summary>
+    /// The doll is hidden for now, and the animals are all there is: a choice of doll saved
+    /// earlier shows the cat instead, and is kept for when this comes back. Snapshots can
+    /// still show the doll. Set to true to bring it back to the menu.
+    /// </summary>
+    private static readonly bool DollEnabled = false;
+
     private Camera3D _camera = null!;
     private Node3D _pivot = null!;
     private PopupMenu _menu = null!;
@@ -138,7 +145,7 @@ public partial class MascotRoot : Node3D
         GetWindow().FilesDropped += files =>
         {
             var vrm = files.FirstOrDefault(f => f.EndsWith(".vrm", StringComparison.OrdinalIgnoreCase));
-            if (vrm != null)
+            if (DollEnabled && vrm != null)
                 LoadCharacter(vrm, persist: true);
         };
 
@@ -537,6 +544,8 @@ public partial class MascotRoot : Node3D
         }
 
         var settings = SettingsStore.Load();
+        if (!DollEnabled && settings.Character != CharacterSource.Animal)
+            return LoadAnimal(Species.Cat, AnimalStyle.LowPoly);
         return settings.Character switch
         {
             // A saved edited body falls back to the default character while the editor is hidden.
@@ -833,8 +842,11 @@ public partial class MascotRoot : Node3D
                 SettingsStore.UseAnimal(species, style);
         };
         _menu.AddSubmenuNodeItem(Tr("MENU_ANIMALS"), animals);
-        _menu.AddItem(Tr("MENU_LOAD_CHARACTER"), MenuLoad);
-        _menu.AddItem(Tr("MENU_DEFAULT_CHARACTER"), MenuReset);
+        if (DollEnabled)
+        {
+            _menu.AddItem(Tr("MENU_LOAD_CHARACTER"), MenuLoad);
+            _menu.AddItem(Tr("MENU_DEFAULT_CHARACTER"), MenuReset);
+        }
         _menu.AddSeparator();
         _menu.AddItem(Tr("MENU_QUIT"), MenuQuit);
         _menu.IdPressed += OnMenu;
