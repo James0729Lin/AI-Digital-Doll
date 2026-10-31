@@ -36,6 +36,9 @@ internal sealed class Snapshot
     /// <summary>Set by <c>--style classic|cube|lowpoly</c> (the animal's version).</summary>
     public AnimalStyle AnimalStyle { get; private set; }
 
+    /// <summary>Set by <c>--coat n</c>: the animal wears this ready-made coat.</summary>
+    public int? CoatPreset { get; private set; }
+
     /// <summary>Set by <c>--body</c>: show an edited body (adjusted with <c>--set key=value</c>).</summary>
     public BodyShape? Body { get; private set; }
 
@@ -82,6 +85,9 @@ internal sealed class Snapshot
                     break;
                 case "--strike":
                     snapshot._strike = value;
+                    break;
+                case "--coat":
+                    snapshot.CoatPreset = int.Parse(value);
                     break;
                 case "--style":
                     snapshot.AnimalStyle = Enum.Parse<AnimalStyle>(value, ignoreCase: true);

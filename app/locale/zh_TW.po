@@ -180,6 +180,51 @@ msgstr "小豬"
 msgid "MENU_ACTIONS"
 msgstr "動作"
 
+msgid "MENU_APPEARANCE"
+msgstr "外觀編輯"
+
+msgid "COAT_TITLE"
+msgstr "外觀編輯"
+
+msgid "COAT_MAIN"
+msgstr "毛色"
+
+msgid "COAT_SECOND"
+msgstr "胸口與腳掌"
+
+msgid "COAT_ACCENT"
+msgstr "耳朵與鼻子"
+
+msgid "COAT_PATTERN"
+msgstr "花紋"
+
+msgid "COAT_PATTERN_NONE"
+msgstr "無"
+
+msgid "COAT_PATTERN_SPOTS"
+msgstr "斑點"
+
+msgid "COAT_PATTERN_STRIPES"
+msgstr "虎斑條紋"
+
+msgid "COAT_PATTERN_PATCHES"
+msgstr "大塊花斑"
+
+msgid "COAT_PATTERN_COLOR"
+msgstr "花紋顏色"
+
+msgid "COAT_PATTERN_SIZE"
+msgstr "花紋大小"
+
+msgid "COAT_PATTERN_AMOUNT"
+msgstr "花紋多寡"
+
+msgid "COAT_RESET"
+msgstr "還原"
+
+msgid "COAT_DONE"
+msgstr "完成"
+
 msgid "MENU_MOVE"
 msgstr "移動位置"
 

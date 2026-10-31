@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -56,6 +57,16 @@ public sealed class AppSettings
 
     [JsonPropertyName("animalStyle")]
     public AnimalStyle AnimalStyle { get; set; } = AnimalStyle.Classic;
+
+    /// <summary>The coats the user gave the animals, by <see cref="CoatKey"/>.</summary>
+    [JsonPropertyName("coats")]
+    public Dictionary<string, AnimalCoat> Coats { get; set; } = new();
+
+    public static string CoatKey(Species species, AnimalStyle style) => $"{species}.{style}".ToLowerInvariant();
+
+    /// <summary>The animal's coat as the user left it, or as it comes.</summary>
+    public AnimalCoat Coat(Species species, AnimalStyle style) =>
+        Coats.TryGetValue(CoatKey(species, style), out var coat) && coat != null ? coat.Checked(species) : AnimalCoat.Default(species);
 
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 

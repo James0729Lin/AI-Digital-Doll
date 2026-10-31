@@ -49,6 +49,7 @@ public partial class MascotRoot : Node3D
     private const int MenuAiSettings = 8;
     private const int MenuMove = 9;
     private const int MenuRotate = 10;
+    private const int MenuAppearance = 11;
 
     /// <summary>
     /// The body editor and the edited body are hidden for now (the code is kept, and
@@ -98,6 +99,8 @@ public partial class MascotRoot : Node3D
     private Snapshot? _snapshot;
     private ChatController? _chat;
     private Chat.ActionMenu? _actions;
+    private Animals.CoatEditor? _coatEditor;
+    private AnimalStyle _animalStyle;
 
     // The --creator argument opens the editor once at start-up, not on every return.
     private static bool _creatorRequested;
@@ -148,6 +151,14 @@ public partial class MascotRoot : Node3D
         if (_snapshot != null)
         {
             _snapshot.Act(_animator!);
+            // Drawn inside the picture, to check its layout.
+            if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--coat-editor") >= 0)
+            {
+                GetViewport().GuiEmbedSubwindows = true;
+                OpenCoatEditor();
+                if (_coatEditor != null)
+                    _coatEditor.Position = new Vector2I(8, 30);
+            }
         }
         else
         {
@@ -155,6 +166,9 @@ public partial class MascotRoot : Node3D
             AddChild(_chat);
             _chat.Attach(this);
             DoubleClicked += _chat.OpenChat;
+            // Development aid: --coat-editor opens the appearance window shortly after start.
+            if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--coat-editor") >= 0)
+                GetTree().CreateTimer(1.5).Timeout += OpenCoatEditor;
         }
         SelfTest.OnSceneReady(this, "desktop");
     }
@@ -602,6 +616,15 @@ public partial class MascotRoot : Node3D
         IMascotBody animal = (style == AnimalStyle.Classic ? null : Animals.ModelAnimalBody.Create(species, style, _random))
             ?? (IMascotBody)Animals.AnimalBody.Create(species, _random);
         _pivot.AddChild(animal.Model);
+        _animalStyle = style;
+        _coatEditor?.Hide();
+        if (animal is Animals.ModelAnimalBody { HasCoat: true } model)
+        {
+            var coat = _snapshot?.CoatPreset is int preset
+                ? CoatPresets.For(species)[Math.Clamp(preset, 0, CoatPresets.For(species).Count - 1)].Coat
+                : SettingsStore.Load().Coat(species, style);
+            model.ApplyCoat(coat);
+        }
         Attach(animal);
         return true;
     }
@@ -781,6 +804,7 @@ public partial class MascotRoot : Node3D
             _menu.AddItem(Tr("MENU_BODY_EDITOR"), MenuCreator);
             _menu.AddSeparator();
         }
+        _menu.AddItem(Tr("MENU_APPEARANCE"), MenuAppearance);
         _menu.AddItem(Tr("MENU_MOVE"), MenuMove);
         _menu.AddItem(Tr("MENU_ROTATE"), MenuRotate);
         _menu.AddItem(Tr("MENU_CALL_OVER"), MenuCallOver);
@@ -824,8 +848,28 @@ public partial class MascotRoot : Node3D
     {
         // Whoever is on the desktop now: an animal's own actions, or the doll's poses.
         _actions?.Refresh();
+        _menu.SetItemDisabled(_menu.GetItemIndex(MenuAppearance), _body is not Animals.ModelAnimalBody { HasCoat: true });
         _menu.Position = screenPosition;
         _menu.Popup();
+    }
+
+    /// <summary>The appearance window for the animal shown; changes show on it as they are made.</summary>
+    private void OpenCoatEditor()
+    {
+        if (_body is not Animals.ModelAnimalBody { HasCoat: true } animal)
+            return;
+        if (_coatEditor == null)
+        {
+            _coatEditor = new Animals.CoatEditor();
+            AddChild(_coatEditor);
+            _coatEditor.Changed += coat => (_body as Animals.ModelAnimalBody)?.ApplyCoat(coat);
+            _coatEditor.Finished += coat =>
+            {
+                if (_body is Animals.ModelAnimalBody shown)
+                    SettingsStore.SaveCoat(shown.Species, _animalStyle, coat);
+            };
+        }
+        _coatEditor.Open(animal.Species, SettingsStore.Load().Coat(animal.Species, _animalStyle), animal.HasSecondColour, animal.HasAccentColour, HeadScreenPosition());
     }
 
     private void OnMenu(long id)
@@ -834,6 +878,9 @@ public partial class MascotRoot : Node3D
         {
             case MenuCallOver:
                 _brain?.WalkTo(CursorInWindow().X);
+                break;
+            case MenuAppearance:
+                OpenCoatEditor();
                 break;
             case MenuMove:
                 StartMoving();

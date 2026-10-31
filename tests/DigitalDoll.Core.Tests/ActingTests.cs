@@ -339,4 +339,26 @@ public class ActingTests
         foreach (var species in Enum.GetValues<Species>())
             Assert.Contains(ActivityCatalog.For(species), a => a.Id == "eat");
     }
+
+    [Fact]
+    public void AnimalCoatsAreKeptAndCheckedOnLoading()
+    {
+        var settings = new AppSettings();
+        Assert.Equal(AnimalCoat.Default(Species.Dog), settings.Coat(Species.Dog, AnimalStyle.LowPoly));
+
+        var spotted = CoatPresets.For(Species.Dog).First(p => p.Coat.Pattern == CoatPattern.Spots).Coat;
+        settings.Coats[AppSettings.CoatKey(Species.Dog, AnimalStyle.LowPoly)] = spotted;
+        var loaded = AppSettings.FromJson(settings.ToJson());
+        Assert.Equal(spotted, loaded.Coat(Species.Dog, AnimalStyle.LowPoly));
+        // Each animal and version has its own.
+        Assert.Equal(AnimalCoat.Default(Species.Cat), loaded.Coat(Species.Cat, AnimalStyle.LowPoly));
+
+        // A hand-edited file cannot break it.
+        var bad = new AnimalCoat { Main = "red", PatternSize = 5f, PatternAmount = float.NaN, Pattern = (CoatPattern)99 }.Checked(Species.Cat);
+        Assert.Equal(AnimalCoat.Default(Species.Cat).Main, bad.Main);
+        Assert.Equal(1f, bad.PatternSize);
+        Assert.Equal(AnimalCoat.Default(Species.Cat).PatternAmount, bad.PatternAmount);
+        Assert.Equal(CoatPattern.None, bad.Pattern);
+        Assert.All(CoatPresets.For(Species.Cat).Concat(CoatPresets.For(Species.Dog)), p => Assert.Equal(p.Coat, p.Coat.Checked(Species.Cat)));
+    }
 }

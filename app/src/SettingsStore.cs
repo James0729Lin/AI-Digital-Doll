@@ -31,6 +31,13 @@ public static class SettingsStore
         Save(settings);
     }
 
+    public static void SaveCoat(Species species, AnimalStyle style, AnimalCoat coat)
+    {
+        var settings = Load();
+        settings.Coats[AppSettings.CoatKey(species, style)] = coat;
+        Save(settings);
+    }
+
     public static void UseCharacter(CharacterSource source)
     {
         var settings = Load();
