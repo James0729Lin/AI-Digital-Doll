@@ -428,8 +428,8 @@ public class AppSettingsTests
         var back = AppSettings.FromJson(settings.ToJson());
         Assert.Equal(Species.Dog, back.Animal);
         Assert.Equal(AnimalStyle.LowPoly, back.AnimalStyle);
-        // Settings saved before versions existed keep the original animals.
-        Assert.Equal(AnimalStyle.Classic, AppSettings.FromJson("{\"character\":\"animal\",\"animal\":\"cat\"}").AnimalStyle);
+        // Settings saved before versions existed get the newest one.
+        Assert.Equal(AnimalStyle.LowPoly, AppSettings.FromJson("{\"character\":\"animal\",\"animal\":\"cat\"}").AnimalStyle);
     }
 
     [Theory]
@@ -439,7 +439,10 @@ public class AppSettingsTests
     [InlineData("{\"character\":\"robot\"}")]
     public void BrokenFilesGiveDefaults(string? json)
     {
-        Assert.Equal(CharacterSource.Default, AppSettings.FromJson(json).Character);
+        var settings = AppSettings.FromJson(json);
+        Assert.Equal(CharacterSource.Animal, settings.Character);
+        Assert.Equal(Species.Cat, settings.Animal);
+        Assert.Equal(AnimalStyle.LowPoly, settings.AnimalStyle);
     }
 }
 

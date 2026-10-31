@@ -50,13 +50,13 @@ public sealed class AppSettings
     };
 
     [JsonPropertyName("character")]
-    public CharacterSource Character { get; set; } = CharacterSource.Default;
+    public CharacterSource Character { get; set; } = CharacterSource.Animal;
 
     [JsonPropertyName("animal")]
     public Species Animal { get; set; } = Species.Cat;
 
     [JsonPropertyName("animalStyle")]
-    public AnimalStyle AnimalStyle { get; set; } = AnimalStyle.Classic;
+    public AnimalStyle AnimalStyle { get; set; } = AnimalStyle.LowPoly;
 
     /// <summary>The coats the user gave the animals, by <see cref="CoatKey"/>.</summary>
     [JsonPropertyName("coats")]
